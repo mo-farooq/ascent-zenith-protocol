@@ -56,10 +56,11 @@ export class Game {
       antialias: true,
       powerPreference: 'high-performance'
     });
+    const pixelRatio = Math.min(window.devicePixelRatio, 1.5);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(pixelRatio);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap; // High-performance filtered shadows
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
 
@@ -83,15 +84,21 @@ export class Game {
     this.skyAtmosphere = new SkyAtmosphere(this.scene);
     this.particles = new ParticleSystem(this.scene);
 
-    // 6. Post-Processing Pipeline (Bloom, Filmic Tone Mapping, Depth Glow)
+    // 6. Post-Processing Pipeline (Optimized Half-Res Bloom & Filmic Tone Mapping)
     this.composer = new EffectComposer(this.renderer);
+    this.composer.setPixelRatio(pixelRatio);
     const renderPass = new RenderPass(this.scene, this.cameraController.camera);
     this.composer.addPass(renderPass);
 
+    // Downscaled bloom buffer (prevents fill-rate saturation on Retina/4K displays)
+    const bloomRes = new THREE.Vector2(
+      Math.min(960, Math.floor(window.innerWidth * 0.5)),
+      Math.min(540, Math.floor(window.innerHeight * 0.5))
+    );
     const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.48, // bloom strength (modern tasteful glow)
-      0.35, // radius
+      bloomRes,
+      0.42, // bloom strength (clean modern glow)
+      0.32, // radius
       0.82  // threshold
     );
     this.composer.addPass(bloomPass);
@@ -338,10 +345,11 @@ export class Game {
   private onWindowResize(): void {
     const width = window.innerWidth;
     const height = window.innerHeight;
+    const pixelRatio = Math.min(window.devicePixelRatio, 1.5);
     this.cameraController.setAspect(width / height);
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(pixelRatio);
     this.composer.setSize(width, height);
-    this.composer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.composer.setPixelRatio(pixelRatio);
   }
 }

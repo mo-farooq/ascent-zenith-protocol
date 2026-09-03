@@ -16,19 +16,19 @@ export class SkyAtmosphere {
     this.hemiLight = new THREE.HemisphereLight(0x70a0d0, 0x222230, 0.7);
     this.scene.add(this.hemiLight);
 
-    // 2. Main Directional Sunlight with Shadows
+    // 2. Main Directional Sunlight with Optimized Shadows
     this.dirLight = new THREE.DirectionalLight(0xfff4e0, 1.3);
     this.dirLight.position.set(120, 250, 100);
     this.dirLight.castShadow = true;
-    this.dirLight.shadow.mapSize.width = 2048;
-    this.dirLight.shadow.mapSize.height = 2048;
-    this.dirLight.shadow.camera.near = 10;
-    this.dirLight.shadow.camera.far = 600;
-    this.dirLight.shadow.camera.left = -60;
-    this.dirLight.shadow.camera.right = 60;
-    this.dirLight.shadow.camera.top = 60;
-    this.dirLight.shadow.camera.bottom = -60;
-    this.dirLight.shadow.bias = -0.0005;
+    this.dirLight.shadow.mapSize.width = 1024;
+    this.dirLight.shadow.mapSize.height = 1024;
+    this.dirLight.shadow.camera.near = 15;
+    this.dirLight.shadow.camera.far = 320;
+    this.dirLight.shadow.camera.left = -40;
+    this.dirLight.shadow.camera.right = 40;
+    this.dirLight.shadow.camera.top = 40;
+    this.dirLight.shadow.camera.bottom = -40;
+    this.dirLight.shadow.bias = -0.0004;
     this.scene.add(this.dirLight);
 
     // 3. Sky Dome Shader
@@ -191,11 +191,13 @@ export class SkyAtmosphere {
       }
     });
 
-    // Directional shadow camera follows player smoothly up to 1000m
+    // Directional shadow camera follows player smoothly with distance threshold
     if (playerPos) {
-      this.dirLight.position.set(playerPos.x + 80, playerPos.y + 110, playerPos.z + 60);
-      this.dirLight.target.position.copy(playerPos);
-      this.dirLight.target.updateMatrixWorld();
+      if (this.dirLight.target.position.distanceToSquared(playerPos) > 1.8) {
+        this.dirLight.target.position.copy(playerPos);
+        this.dirLight.position.set(playerPos.x + 70, playerPos.y + 100, playerPos.z + 55);
+        this.dirLight.target.updateMatrixWorld();
+      }
     }
 
     // Altitude color transition (0m to 1000m)

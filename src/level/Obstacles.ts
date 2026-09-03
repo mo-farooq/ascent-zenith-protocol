@@ -209,7 +209,6 @@ export class LaunchPad implements UpdatableObstacle {
   private glowRing: THREE.Mesh;
   private chevrons: THREE.Group = new THREE.Group();
   private time = Math.random() * 10;
-  private pointLight: THREE.PointLight;
 
   constructor(
     scene: THREE.Scene,
@@ -262,11 +261,6 @@ export class LaunchPad implements UpdatableObstacle {
     }
     this.chevrons.position.copy(position);
     scene.add(this.chevrons);
-
-    // Point Light
-    this.pointLight = new THREE.PointLight(0x00f0ff, 1.2, 6.0);
-    this.pointLight.position.set(position.x, position.y + 0.8, position.z);
-    scene.add(this.pointLight);
 
     this.volume = new CollisionVolume(VolumeType.LAUNCH_PAD, size.clone().multiplyScalar(0.5), position);
     this.volume.launchImpulse = impulse;

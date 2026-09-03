@@ -6,7 +6,6 @@ export class EnergyCell {
   public collected = false;
   private coreMesh: THREE.Mesh;
   private ringMesh: THREE.Mesh;
-  private light: THREE.PointLight;
   private time = Math.random() * 10;
   private baseY: number;
 
@@ -37,10 +36,6 @@ export class EnergyCell {
     });
     this.ringMesh = new THREE.Mesh(ringGeo, ringMat);
     this.group.add(this.ringMesh);
-
-    // Light
-    this.light = new THREE.PointLight(0x00f0ff, 1.5, 5);
-    this.group.add(this.light);
 
     scene.add(this.group);
   }

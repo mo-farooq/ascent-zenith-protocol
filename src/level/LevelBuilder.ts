@@ -698,7 +698,7 @@ export class LevelBuilder {
     const geo = new THREE.BoxGeometry(size.x, size.y, size.z);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.copy(pos);
-    mesh.castShadow = true;
+    mesh.castShadow = size.y >= 1.2 || size.x >= 5.0 || size.z >= 5.0;
     mesh.receiveShadow = true;
     this.scene.add(mesh);
 

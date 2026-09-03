@@ -205,12 +205,18 @@ export class PhysicsWorld {
   }
 
   /**
-   * Broadphase AABB query
+   * Broadphase AABB query with altitude pre-filtering
    */
   public queryAABB(box: THREE.Box3): CollisionVolume[] {
     const hits: CollisionVolume[] = [];
+    const minY = box.min.y - 4.0;
+    const maxY = box.max.y + 4.0;
+
     for (const vol of this.volumes) {
       if (vol.isCumbled) continue;
+      // Fast altitude rejection
+      if (vol.position.y < minY || vol.position.y > maxY) continue;
+
       vol.getAABB(this.tempBox);
       if (box.intersectsBox(this.tempBox)) {
         hits.push(vol);
@@ -219,19 +225,25 @@ export class PhysicsWorld {
     return hits;
   }
 
+  private camInvDir = new THREE.Vector3();
+
   /**
-   * Camera raycast for wall occlusion avoidance
+   * Camera raycast for wall occlusion avoidance with altitude filtering
    */
   public raycastCamera(rayOrigin: THREE.Vector3, rayDir: THREE.Vector3, maxDist: number): number {
     let closestDist = maxDist;
-    const invDir = new THREE.Vector3(1 / rayDir.x, 1 / rayDir.y, 1 / rayDir.z);
+    this.camInvDir.set(1 / rayDir.x, 1 / rayDir.y, 1 / rayDir.z);
+    const minY = rayOrigin.y - maxDist - 2.0;
+    const maxY = rayOrigin.y + maxDist + 2.0;
 
     for (const vol of this.volumes) {
       if (vol.isCumbled || vol.isHazard) continue;
+      // Fast altitude rejection
+      if (vol.position.y < minY || vol.position.y > maxY) continue;
 
       vol.getAABB(this.tempBox);
       // Fast AABB intersection
-      const t = this.intersectRayAABB(rayOrigin, invDir, this.tempBox);
+      const t = this.intersectRayAABB(rayOrigin, this.camInvDir, this.tempBox);
       if (t !== null && t < closestDist && t > 0.1) {
         closestDist = t;
       }
