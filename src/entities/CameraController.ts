@@ -110,14 +110,19 @@ export class CameraController {
     const maxRayDist = effectiveDist;
     const hitDist = this.physics.raycastCamera(this.currentLookAt, camDir, maxRayDist);
 
-    // Smoothly adjust camera distance
-    const safeDist = Math.max(1.5, hitDist - 0.25);
-    this.currentDistance = THREE.MathUtils.lerp(this.currentDistance, safeDist, Math.min(1, dt * 18));
-
-    this.idealCameraPos.copy(this.currentLookAt).addScaledVector(camDir, this.currentDistance);
-
-    // Position camera and orient
-    this.camera.position.lerp(this.idealCameraPos, Math.min(1, dt * 28));
+    // Asymmetric distance lerping: instant snap-in when occluded by geometry, smooth lerp when pulling back out
+    const safeDist = (hitDist < maxRayDist) ? Math.max(0.4, hitDist - 0.25) : maxRayDist;
+    if (safeDist < this.currentDistance) {
+      // Instant snap-in when occluded by geometry to prevent wall ingress
+      this.currentDistance = safeDist;
+      this.idealCameraPos.copy(this.currentLookAt).addScaledVector(camDir, this.currentDistance);
+      this.camera.position.copy(this.idealCameraPos);
+    } else {
+      // Smooth lerp when pulling back out into open space
+      this.currentDistance = THREE.MathUtils.lerp(this.currentDistance, safeDist, Math.min(1, dt * 10));
+      this.idealCameraPos.copy(this.currentLookAt).addScaledVector(camDir, this.currentDistance);
+      this.camera.position.lerp(this.idealCameraPos, Math.min(1, dt * 28));
+    }
 
     // Apply trauma screen shake
     if (this.trauma > 0.001) {
@@ -134,11 +139,12 @@ export class CameraController {
   }
 
   public snapToTarget(targetPos: THREE.Vector3): void {
-    this.currentLookAt.copy(targetPos);
-    this.targetLookAt.copy(targetPos);
+    // Focus lookAt on climber center (1.35m above feet)
+    const lookTarget = new THREE.Vector3(targetPos.x, targetPos.y + 1.35, targetPos.z);
+    this.currentLookAt.copy(lookTarget);
+    this.targetLookAt.copy(lookTarget);
     this.pitch = this.targetPitch;
     this.yaw = this.targetYaw;
-    this.currentDistance = this.targetDistance;
 
     const cosPitch = Math.cos(this.pitch);
     const sinPitch = Math.sin(this.pitch);
@@ -146,7 +152,13 @@ export class CameraController {
     const cosYaw = Math.cos(this.yaw);
     const camDir = new THREE.Vector3(sinYaw * cosPitch, sinPitch, cosYaw * cosPitch).normalize();
 
-    this.idealCameraPos.copy(targetPos).addScaledVector(camDir, this.targetDistance);
+    // Call occlusion raycasting in snapToTarget()
+    const maxRayDist = this.targetDistance;
+    const hitDist = this.physics.raycastCamera(this.currentLookAt, camDir, maxRayDist);
+    const safeDist = (hitDist < maxRayDist) ? Math.max(0.4, hitDist - 0.25) : maxRayDist;
+    this.currentDistance = safeDist;
+
+    this.idealCameraPos.copy(this.currentLookAt).addScaledVector(camDir, this.currentDistance);
     this.camera.position.copy(this.idealCameraPos);
     this.camera.lookAt(this.currentLookAt);
   }

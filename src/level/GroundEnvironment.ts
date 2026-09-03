@@ -86,14 +86,6 @@ export class GroundEnvironment {
     pylonGroup.add(spot);
     pylonGroup.add(spot.target);
 
-    // Collision
-    const col = new CollisionVolume(
-      VolumeType.BOX,
-      new THREE.Vector3(0.5, height / 2, 0.5),
-      pos.clone().add(new THREE.Vector3(0, height / 2, 0))
-    );
-    this.physics.addVolume(col);
-
     this.group.add(pylonGroup);
   }
 

@@ -9,6 +9,18 @@ export default defineConfig({
     postcss: {}
   },
   build: {
-    target: 'esnext'
+    target: 'esnext',
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/three/examples/jsm/postprocessing/')) {
+            return 'postprocessing-vendor';
+          }
+          if (id.includes('node_modules/three/')) {
+            return 'three-vendor';
+          }
+        }
+      }
+    }
   }
 });

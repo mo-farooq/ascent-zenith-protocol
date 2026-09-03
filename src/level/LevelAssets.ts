@@ -243,9 +243,10 @@ export class LevelAssets {
     ring.position.set(0, 1.4, size.z / 2 + 0.12);
     group.add(ring);
 
-    // Collision
-    const worldCenter = position.clone().add(new THREE.Vector3(0, size.y / 2, 0));
-    const volume = new CollisionVolume(VolumeType.OBB, size.clone().multiplyScalar(0.5), worldCenter);
+    // Collision: Walkable roof surface
+    const roofHalfExtents = new THREE.Vector3(size.x * 0.5, 0.25, size.z * 0.5);
+    const worldCenter = position.clone().add(new THREE.Vector3(0, size.y - 0.25, 0));
+    const volume = new CollisionVolume(VolumeType.OBB, roofHalfExtents, worldCenter);
     volume.setRotationFromEuler(0, yaw, 0);
     this.physics.addVolume(volume);
 
@@ -445,14 +446,6 @@ export class LevelAssets {
 
     group.add(ringGroup);
 
-    // Collision
-    const volume = new CollisionVolume(
-      VolumeType.BOX,
-      new THREE.Vector3(radius + 0.2, height / 2 + 0.2, radius + 0.2),
-      position.clone().add(new THREE.Vector3(0, height / 2 + 0.2, 0))
-    );
-    this.physics.addVolume(volume);
-
     this.scene.add(group);
 
     const obstacle: UpdatableObstacle = {
@@ -491,13 +484,6 @@ export class LevelAssets {
     cap.position.y = height + 0.3;
     cap.receiveShadow = true;
     group.add(cap);
-
-    const volume = new CollisionVolume(
-      VolumeType.BOX,
-      new THREE.Vector3(width * 0.55, height / 2 + 0.3, width * 0.55),
-      position.clone().add(new THREE.Vector3(0, height / 2 + 0.3, 0))
-    );
-    this.physics.addVolume(volume);
 
     this.scene.add(group);
     return group;

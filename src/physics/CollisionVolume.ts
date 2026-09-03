@@ -28,6 +28,9 @@ export class CollisionVolume {
   public linearVelocity = new THREE.Vector3();
   public angularVelocity = new THREE.Vector3();
   public launchImpulse = 26; // for LAUNCH_PAD
+  public targetPosition?: THREE.Vector3;
+  public launchVelocity?: THREE.Vector3;
+  public launchDuration?: number;
   public isCrumbling = false;
   public crumbleTimer = 0;
   public isCumbled = false;
@@ -130,12 +133,22 @@ export class CollisionVolume {
       }
     }
 
-    if (tmin >= 0 && tmin <= maxDist) {
+    if (tmin >= 0 && tmin <= maxDist + 1e-4) {
       // Transform local hit normal back to world space
       const worldNormal = hitNormal.clone().transformDirection(this.matrixWorld).normalize();
       return {
         hit: true,
         dist: tmin,
+        normal: worldNormal
+      };
+    }
+
+    // Origin is inside the bounding box (tmin < 0 <= tmax): detect ground without dropping raycast
+    if (tmin < 0 && tmax >= 0) {
+      const worldNormal = new THREE.Vector3(0, 1, 0).transformDirection(this.matrixWorld).normalize();
+      return {
+        hit: true,
+        dist: 0,
         normal: worldNormal
       };
     }
@@ -173,7 +186,11 @@ export class CollisionVolume {
 
       const localNormal = new THREE.Vector3();
       let depth = radius;
-      if (dx < dy && dx < dz) {
+      if (localCenter.y > this.halfExtents.y - radius * 0.5) {
+        // Prioritize upward vertical normal on top surface and edges to eliminate horizontal ejection into void
+        localNormal.set(0, 1, 0);
+        depth += dy;
+      } else if (dx < dy && dx < dz) {
         localNormal.set(Math.sign(localCenter.x) || 1, 0, 0);
         depth += dx;
       } else if (dy < dz) {

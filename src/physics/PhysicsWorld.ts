@@ -9,6 +9,9 @@ export interface GroundCheckResult {
   surfaceAngle: number; // degrees from horizontal
   isLaunchPad: boolean;
   launchImpulse: number;
+  targetPosition?: THREE.Vector3;
+  launchVelocity?: THREE.Vector3;
+  launchDuration?: number;
 }
 
 export class PhysicsWorld {
@@ -58,7 +61,16 @@ export class PhysicsWorld {
   /**
    * Comprehensive downward ground check with 5 rays (center + 4 corners)
    */
-  public checkGround(feetPosition: THREE.Vector3, radius = 0.35, checkDist = 0.35): GroundCheckResult {
+  public checkGround(
+    feetPosition: THREE.Vector3,
+    radius = 0.35,
+    checkDist = 0.35,
+    verticalVelocity = 0,
+    dt = 0.016
+  ): GroundCheckResult {
+    const downwardSpeed = verticalVelocity < 0 ? -verticalVelocity : 0;
+    const effectiveCheckDist = Math.max(checkDist, downwardSpeed * dt * 2.5 + 0.55);
+
     const offsets = [
       new THREE.Vector3(0, 0, 0),
       new THREE.Vector3(radius * 0.65, 0, 0),
@@ -72,9 +84,9 @@ export class PhysicsWorld {
     let bestVolume: CollisionVolume | null = null;
     let hitFound = false;
 
-    // Search query box
+    // Search query box expanded by dynamic check distance
     const queryBox = new THREE.Box3(
-      new THREE.Vector3(feetPosition.x - radius - 1, feetPosition.y - checkDist - 1, feetPosition.z - radius - 1),
+      new THREE.Vector3(feetPosition.x - radius - 1, feetPosition.y - effectiveCheckDist - 1, feetPosition.z - radius - 1),
       new THREE.Vector3(feetPosition.x + radius + 1, feetPosition.y + 1, feetPosition.z + radius + 1)
     );
 
@@ -87,7 +99,7 @@ export class PhysicsWorld {
       for (const vol of candidates) {
         if (vol.isCumbled || vol.isHazard) continue;
 
-        const hit = vol.raycastDown(rayOrigin, checkDist + 0.15);
+        const hit = vol.raycastDown(rayOrigin, effectiveCheckDist + 0.15);
         if (hit && hit.hit) {
           const hitY = rayOrigin.y - hit.dist;
           if (hitY > highestHitY) {
@@ -100,7 +112,7 @@ export class PhysicsWorld {
       }
     }
 
-    if (hitFound && highestHitY >= feetPosition.y - checkDist) {
+    if (hitFound && highestHitY >= feetPosition.y - effectiveCheckDist) {
       // Calculate slope angle: angle between normal and (0,1,0)
       const dot = Math.max(-1, Math.min(1, bestNormal.dot(new THREE.Vector3(0, 1, 0))));
       const angleDeg = Math.acos(dot) * (180 / Math.PI);
@@ -118,7 +130,10 @@ export class PhysicsWorld {
         volume: bestVolume,
         surfaceAngle: angleDeg,
         isLaunchPad: bestVolume?.type === VolumeType.LAUNCH_PAD,
-        launchImpulse: bestVolume?.launchImpulse || 26
+        launchImpulse: bestVolume?.launchImpulse || 26,
+        targetPosition: bestVolume?.targetPosition,
+        launchVelocity: bestVolume?.launchVelocity,
+        launchDuration: bestVolume?.launchDuration
       };
     }
 
@@ -176,7 +191,7 @@ export class PhysicsWorld {
             const contactY = res.contactPoint.y;
             const stepDiff = contactY - position.y;
 
-            if (sIdx === 0 && stepDiff > 0.02 && stepDiff <= maxStepHeight && res.normal.y > -0.2) {
+            if (sIdx === 0 && stepDiff > 0.02 && stepDiff <= maxStepHeight && res.normal.y >= 0.5) {
               // Smoothly step up onto small ledge
               position.y += stepDiff * 0.5;
               continue;
@@ -214,8 +229,8 @@ export class PhysicsWorld {
 
     for (const vol of this.volumes) {
       if (vol.isCumbled) continue;
-      // Fast altitude rejection
-      if (vol.position.y < minY || vol.position.y > maxY) continue;
+      // Fast altitude rejection incorporating vertical halfExtents
+      if (vol.position.y - vol.halfExtents.y > maxY || vol.position.y + vol.halfExtents.y < minY) continue;
 
       vol.getAABB(this.tempBox);
       if (box.intersectsBox(this.tempBox)) {
@@ -238,8 +253,8 @@ export class PhysicsWorld {
 
     for (const vol of this.volumes) {
       if (vol.isCumbled || vol.isHazard) continue;
-      // Fast altitude rejection
-      if (vol.position.y < minY || vol.position.y > maxY) continue;
+      // Fast altitude rejection incorporating vertical halfExtents
+      if (vol.position.y - vol.halfExtents.y > maxY || vol.position.y + vol.halfExtents.y < minY) continue;
 
       vol.getAABB(this.tempBox);
       // Fast AABB intersection

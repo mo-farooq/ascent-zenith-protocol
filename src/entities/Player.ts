@@ -4,6 +4,7 @@ import { CollisionVolume, VolumeType } from '../physics/CollisionVolume';
 import { CharacterModel, CharacterAnimState } from './CharacterModel';
 import { InputState } from '../core/Input';
 import { AudioManager } from '../core/Audio';
+import { CameraController } from './CameraController';
 
 export interface PlayerStats {
   altitude: number;
@@ -17,7 +18,7 @@ export interface PlayerStats {
 }
 
 export class Player {
-  public position = new THREE.Vector3(0, 0.2, 0); // feet position
+  public position = new THREE.Vector3(0, 0.35, 0); // feet position with safe ground clearance
   public velocity = new THREE.Vector3(0, 0, 0);
   public model: CharacterModel;
 
@@ -43,6 +44,7 @@ export class Player {
 
   // State
   private isGrounded = false;
+  private isPlayerJump = false;
   private coyoteTimer = 0;
   private jumpBufferTimer = 0;
   private groundNormal = new THREE.Vector3(0, 1, 0);
@@ -58,7 +60,7 @@ export class Player {
   private onRespawnCallback?: () => void;
 
   // Checkpoints
-  private respawnPosition = new THREE.Vector3(0, 0.2, 0);
+  private respawnPosition = new THREE.Vector3(0, 0.35, 0);
   private respawnYaw = 0;
 
   // Stats tracking
@@ -68,10 +70,19 @@ export class Player {
   // Facing orientation
   public facingYaw = 0;
 
-  constructor(private physics: PhysicsWorld, private audio: AudioManager) {
-    this.position.set(0, 0.2, 0);
+  constructor(
+    private physics: PhysicsWorld,
+    private audio: AudioManager,
+    private cameraController?: CameraController
+  ) {
+    this.position.set(0, 0.35, 0);
+    this.respawnPosition.set(0, 0.35, 0);
     this.model = new CharacterModel();
     this.model.group.position.copy(this.position);
+  }
+
+  public setCameraController(cameraController: CameraController): void {
+    this.cameraController = cameraController;
   }
 
   public setCallbacks(
@@ -86,23 +97,42 @@ export class Player {
 
   public setCheckpoint(pos: THREE.Vector3, yaw = 0): void {
     this.respawnPosition.copy(pos);
-    this.respawnPosition.y = pos.y + 0.15; // clean offset resting feet directly on platform surface
     this.respawnYaw = yaw;
+
+    // Verify ground height below the checkpoint to place feet directly on ground surface
+    const ground = this.physics.checkGround(pos, this.radius, 2.0);
+    if (ground.isGrounded) {
+      this.respawnPosition.y = ground.groundY;
+    } else {
+      this.respawnPosition.y = pos.y;
+    }
   }
 
   public respawn(): void {
+    // Verify ground surface placement
+    const ground = this.physics.checkGround(this.respawnPosition, this.radius, 2.0);
+    if (ground.isGrounded) {
+      this.respawnPosition.y = ground.groundY;
+    }
+
     this.position.copy(this.respawnPosition);
-    this.velocity.set(0, 0, 0);
+    this.velocity.set(0, 0, 0); // Linear velocities (x, y, z) zeroed upon respawn
     this.facingYaw = this.respawnYaw;
     this.isFalling = false;
-    this.isGrounded = true;
-    this.currentPlatform = null;
+    if (ground.isGrounded) {
+      this.isGrounded = true;
+      this.currentPlatform = ground.volume;
+    } else {
+      this.isGrounded = false;
+      this.currentPlatform = null;
+    }
     this.coyoteTimer = 0;
     this.jumpBufferTimer = 0;
     this.dashCooldown = 0;
     this.dashDurationTimer = 0;
     this.model.group.position.copy(this.position);
     this.model.group.rotation.y = this.facingYaw;
+    this.cameraController?.snapToTarget(this.position);
     this.onRespawnCallback?.();
   }
 
@@ -148,28 +178,35 @@ export class Player {
       this.lastPlatformPos.copy(this.currentPlatform.position);
     }
 
-    // 2. Ground Detection (multi-ray sweep)
-    const ground: GroundCheckResult = this.physics.checkGround(this.position, this.radius, 0.35);
+    // 2. Ground Detection (multi-ray sweep with dynamic fall distance & anti-tunneling)
+    const ground: GroundCheckResult = this.physics.checkGround(
+      this.position,
+      this.radius,
+      0.35,
+      this.velocity.y,
+      dt
+    );
     const wasGrounded = this.isGrounded;
-    this.isGrounded = ground.isGrounded;
+    this.isGrounded = ground.isGrounded && this.velocity.y <= 0.1 && this.dashDurationTimer <= 0;
     this.groundNormal.copy(ground.normal);
 
-    // Launch Pad Trigger
-    if (this.isGrounded && ground.isLaunchPad) {
+    // Launch Pad Trigger: fires when making contact with a launch pad
+    if (ground.isLaunchPad && (ground.isGrounded || this.isGrounded || this.velocity.y <= 0.5)) {
       this.velocity.y = ground.launchImpulse;
       // Add forward momentum boost in facing direction for cinematic arc
       const forwardDir = new THREE.Vector3(-Math.sin(this.facingYaw), 0, -Math.cos(this.facingYaw));
       this.velocity.x = forwardDir.x * 8.0;
       this.velocity.z = forwardDir.z * 8.0;
       this.isGrounded = false;
+      this.isPlayerJump = false;
       this.coyoteTimer = 0;
       this.audio.playLaunchPad();
-      this.audio.playLanding(5);
       this.model.triggerLandSquash(0.8);
     }
 
     if (this.isGrounded) {
       this.coyoteTimer = 0.11; // 110ms coyote window
+      this.isPlayerJump = false;
       if (ground.volume !== this.currentPlatform) {
         this.currentPlatform = ground.volume;
         if (this.currentPlatform) {
@@ -202,9 +239,10 @@ export class Player {
       this.executeJump();
     }
 
-    // Variable jump height truncation: releasing Space cuts vertical velocity
-    if (!input.jump && this.velocity.y > 2.0) {
+    // Variable jump height truncation: releasing Space cuts vertical velocity only for player-initiated jumps
+    if (this.isPlayerJump && !input.jump && this.velocity.y > 2.0) {
       this.velocity.y *= 0.55;
+      this.isPlayerJump = false;
     }
 
     // 4. Horizontal Movement Input
@@ -252,10 +290,12 @@ export class Player {
       }
     } else {
       // Air acceleration (skill-based air control)
-      this.velocity.x = THREE.MathUtils.damp(this.velocity.x, targetVelX, this.airAccel, dt);
-      this.velocity.z = THREE.MathUtils.damp(this.velocity.z, targetVelZ, this.airAccel, dt);
-      this.velocity.x *= Math.pow(1 - this.airDrag * 0.05, dt * 60);
-      this.velocity.z *= Math.pow(1 - this.airDrag * 0.05, dt * 60);
+      if (this.dashDurationTimer <= 0) {
+        this.velocity.x = THREE.MathUtils.damp(this.velocity.x, targetVelX, this.airAccel, dt);
+        this.velocity.z = THREE.MathUtils.damp(this.velocity.z, targetVelZ, this.airAccel, dt);
+        this.velocity.x *= Math.pow(1 - this.airDrag * 0.05, dt * 60);
+        this.velocity.z *= Math.pow(1 - this.airDrag * 0.05, dt * 60);
+      }
 
       // Apply Gravity
       const currentGrav = this.velocity.y < 0 ? (this.gravity * this.fallGravityMultiplier) : this.gravity;
@@ -271,8 +311,8 @@ export class Player {
     this.physics.resolveCapsuleCollisions(this.position, this.velocity, this.radius, this.height);
 
     // 7. Fall Out-of-Bounds Detection
-    // If player falls below -8m (below ground tarmac) or drops drastically without landing
-    if (this.position.y < -8.0 || (!this.isGrounded && this.position.y < this.respawnPosition.y - 35 && this.velocity.y < -15)) {
+    // If player falls below -8m (below ground tarmac) or drops drastically below checkpoint
+    if (this.position.y < -8.0 || (!this.isGrounded && this.position.y < this.respawnPosition.y - 25.0)) {
       this.triggerFall();
     }
 
@@ -304,6 +344,7 @@ export class Player {
   private executeJump(): void {
     this.velocity.y = this.jumpVelocity;
     this.isGrounded = false;
+    this.isPlayerJump = true;
     this.coyoteTimer = 0;
     this.jumpBufferTimer = 0;
 
