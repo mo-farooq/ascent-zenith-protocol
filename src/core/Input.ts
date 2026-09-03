@@ -4,17 +4,23 @@ export interface InputState {
   jump: boolean;    // is jump held
   jumpPressed: boolean; // was jump pressed this frame
   sprint: boolean;
+  descend?: boolean;    // descend held (KeyC or Ctrl)
   mouseDeltaX: number;
   mouseDeltaY: number;
   mouseWheelDelta: number;
   pausePressed: boolean;
   respawnPressed: boolean;
   dashPressed: boolean;
+  jetpackTogglePressed?: boolean; // KeyJ or cheat code activation
+  cheatUnlocked?: string | null;  // e.g. 'JETPACK'
 }
 
 export class Input {
   private keys = new Map<string, boolean>();
   private justPressed = new Set<string>();
+  private keyHistory: string[] = [];
+  private pendingCheat: string | null = null;
+  private konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
   private mouseDeltaX = 0;
   private mouseDeltaY = 0;
   private mouseWheelDelta = 0;
@@ -147,9 +153,16 @@ export class Input {
     const jumpHeld = this.isKeyDown('Space') || (gp ? gp.buttons[0]?.pressed : false);
     const jumpPressed = this.consumeJustPressed('Space') || (gp ? gp.buttons[0]?.pressed : false);
     const sprint = this.isKeyDown('ShiftLeft') || this.isKeyDown('ShiftRight') || (gp ? gp.buttons[10]?.pressed : false);
+    const descend = this.isKeyDown('KeyC') || this.isKeyDown('ControlLeft') || this.isKeyDown('ControlRight');
     const pausePressed = this.consumeJustPressed('Escape') || (gp ? gp.buttons[9]?.pressed : false);
     const respawnPressed = this.consumeJustPressed('KeyR') || (gp ? gp.buttons[8]?.pressed : false);
     const dashPressed = this.consumeJustPressed('KeyE') || this.consumeJustPressed('KeyQ') || this.consumeJustPressed('MouseButtonRight') || (gp ? gp.buttons[2]?.pressed : false);
+    const jetpackTogglePressed = this.consumeJustPressed('KeyJ') || (this.pendingCheat === 'JETPACK');
+
+    const cheatUnlocked = this.pendingCheat;
+    if (this.pendingCheat) {
+      this.pendingCheat = null;
+    }
 
     const deltaX = this.mouseDeltaX;
     const deltaY = this.mouseDeltaY;
@@ -165,12 +178,15 @@ export class Input {
       jump: jumpHeld,
       jumpPressed,
       sprint,
+      descend,
       mouseDeltaX: deltaX,
       mouseDeltaY: deltaY,
       mouseWheelDelta: wheelDelta,
       pausePressed,
       respawnPressed,
-      dashPressed
+      dashPressed,
+      jetpackTogglePressed,
+      cheatUnlocked
     };
   }
 
@@ -204,6 +220,22 @@ export class Input {
         this.justPressed.add(e.code);
       }
       this.keys.set(e.code, true);
+
+      // Track keystroke history for easter eggs & cheat codes
+      this.keyHistory.push(e.code);
+      if (this.keyHistory.length > 25) {
+        this.keyHistory.shift();
+      }
+
+      // Check text-based cheat codes ("jetpack", "rocket", "fly", "zenith")
+      const rawText = this.keyHistory.map(k => k.replace('Key', '').toLowerCase()).join('');
+      if (rawText.endsWith('jetpack') || rawText.endsWith('rocket') || rawText.endsWith('fly') || rawText.endsWith('zenith')) {
+        this.pendingCheat = 'JETPACK';
+        this.keyHistory = [];
+      } else if (this.checkKonamiCode()) {
+        this.pendingCheat = 'JETPACK';
+        this.keyHistory = [];
+      }
     });
 
     window.addEventListener('keyup', (e) => {
@@ -252,5 +284,11 @@ export class Input {
       }
     }
     return null;
+  }
+
+  private checkKonamiCode(): boolean {
+    if (this.keyHistory.length < this.konamiCode.length) return false;
+    const tail = this.keyHistory.slice(-this.konamiCode.length);
+    return tail.every((code, idx) => code === this.konamiCode[idx]);
   }
 }

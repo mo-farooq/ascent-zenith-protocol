@@ -15,6 +15,9 @@ export interface PlayerStats {
   fallDistance: number;
   dashCooldown: number;
   maxDashCooldown: number;
+  isJetpackUnlocked: boolean;
+  isJetpackActive: boolean;
+  isJetpackThrusting: boolean;
 }
 
 export class Player {
@@ -69,6 +72,12 @@ export class Player {
 
   // Facing orientation
   public facingYaw = 0;
+
+  // Jetpack Easter Egg / Cheat System
+  public isJetpackUnlocked = false;
+  public isJetpackActive = false;
+  public isJetpackThrusting = false;
+  private jetpackHoverTimer = 0;
 
   constructor(
     private physics: PhysicsWorld,
@@ -157,6 +166,22 @@ export class Player {
     if (this.dashCooldown > 0) this.dashCooldown = Math.max(0, this.dashCooldown - dt);
     if (this.dashDurationTimer > 0) this.dashDurationTimer -= dt;
 
+    // Check Jetpack Easter Egg / Cheat code activation
+    if (input.cheatUnlocked === 'JETPACK') {
+      this.isJetpackUnlocked = true;
+      this.isJetpackActive = true;
+      this.audio.playCheatUnlocked();
+      this.audio.playThrusterDash();
+    } else if (input.jetpackTogglePressed) {
+      this.isJetpackUnlocked = true;
+      this.isJetpackActive = !this.isJetpackActive;
+      if (this.isJetpackActive) {
+        this.audio.playCheatUnlocked();
+      } else {
+        this.audio.stopJetpackSound();
+      }
+    }
+
     if (input.jumpPressed) {
       this.jumpBufferTimer = 0.12; // 120ms buffer
     }
@@ -235,12 +260,12 @@ export class Player {
     }
 
     // 3. Jump Processing
-    if (this.jumpBufferTimer > 0 && (this.isGrounded || this.coyoteTimer > 0)) {
+    if (!this.isJetpackActive && this.jumpBufferTimer > 0 && (this.isGrounded || this.coyoteTimer > 0)) {
       this.executeJump();
     }
 
     // Variable jump height truncation: releasing Space cuts vertical velocity only for player-initiated jumps
-    if (this.isPlayerJump && !input.jump && this.velocity.y > 2.0) {
+    if (!this.isJetpackActive && this.isPlayerJump && !input.jump && this.velocity.y > 2.0) {
       this.velocity.y *= 0.55;
       this.isPlayerJump = false;
     }
@@ -260,46 +285,85 @@ export class Player {
       this.facingYaw = this.lerpAngle(this.facingYaw, targetYaw, dt * 16);
     }
 
-    const targetSpeed = input.sprint ? this.sprintSpeed : this.walkSpeed;
-    const targetVelX = moveDir.x * targetSpeed;
-    const targetVelZ = moveDir.z * targetSpeed;
-
     // 5. Accelerate & Damp Velocity
-    if (this.isGrounded) {
-      // Check slope sliding (> 45 degrees)
-      if (ground.surfaceAngle > 46) {
-        // Slide downhill along gravity projected on slope
-        const downhill = new THREE.Vector3(0, -1, 0).projectOnPlane(ground.normal).normalize();
-        this.velocity.x += downhill.x * this.gravity * 0.8 * dt;
-        this.velocity.z += downhill.z * this.gravity * 0.8 * dt;
-      } else {
-        // Normal ground walking acceleration / friction
-        const accel = (moveDir.lengthSq() > 0.01) ? this.groundAccel : this.groundDecel;
-        this.velocity.x = THREE.MathUtils.damp(this.velocity.x, targetVelX, accel, dt);
-        this.velocity.z = THREE.MathUtils.damp(this.velocity.z, targetVelZ, accel, dt);
+    if (this.isJetpackActive) {
+      this.jetpackHoverTimer += dt * 3.5;
+      this.isJetpackThrusting = false;
 
-        // Footstep sounds
-        const horizSpeed = Math.hypot(this.velocity.x, this.velocity.z);
-        if (horizSpeed > 1.2) {
-          this.stepTimer += dt * (input.sprint ? 13 : 9);
-          if (this.stepTimer >= Math.PI) {
-            this.stepTimer -= Math.PI;
-            this.audio.playFootstep(input.sprint);
+      const flySpeed = input.sprint ? 24.0 : 14.0;
+      const verticalAscentSpeed = input.sprint ? 22.0 : 15.0;
+      const verticalDescendSpeed = -10.0;
+
+      // Vertical Flight Controls (Ascend with Space, Descend with C/Ctrl, Hover otherwise)
+      if (input.jump) {
+        this.velocity.y = THREE.MathUtils.damp(this.velocity.y, verticalAscentSpeed, 18.0, dt);
+        this.isGrounded = false;
+        this.isJetpackThrusting = true;
+        this.fallStartAltitude = this.position.y;
+      } else if (input.descend) {
+        this.velocity.y = THREE.MathUtils.damp(this.velocity.y, verticalDescendSpeed, 16.0, dt);
+        this.isJetpackThrusting = true;
+      } else {
+        // Anti-Gravity Hover Stabilization: neutralizes gravity with gentle floating bob
+        const hoverBob = Math.sin(this.jetpackHoverTimer) * 0.35;
+        this.velocity.y = THREE.MathUtils.damp(this.velocity.y, hoverBob, 8.0, dt);
+        this.fallStartAltitude = this.position.y;
+      }
+
+      // Horizontal 3D Flight Control
+      const targetVelX = moveDir.x * flySpeed;
+      const targetVelZ = moveDir.z * flySpeed;
+      this.velocity.x = THREE.MathUtils.damp(this.velocity.x, targetVelX, 22.0, dt);
+      this.velocity.z = THREE.MathUtils.damp(this.velocity.z, targetVelZ, 22.0, dt);
+
+      if (moveDir.lengthSq() > 0.01 || input.jump || input.descend) {
+        this.isJetpackThrusting = true;
+      }
+
+      this.audio.updateJetpackSound(this.isJetpackThrusting, true);
+    } else {
+      this.audio.updateJetpackSound(false, false);
+
+      const targetSpeed = input.sprint ? this.sprintSpeed : this.walkSpeed;
+      const targetVelX = moveDir.x * targetSpeed;
+      const targetVelZ = moveDir.z * targetSpeed;
+
+      if (this.isGrounded) {
+        // Check slope sliding (> 45 degrees)
+        if (ground.surfaceAngle > 46) {
+          // Slide downhill along gravity projected on slope
+          const downhill = new THREE.Vector3(0, -1, 0).projectOnPlane(ground.normal).normalize();
+          this.velocity.x += downhill.x * this.gravity * 0.8 * dt;
+          this.velocity.z += downhill.z * this.gravity * 0.8 * dt;
+        } else {
+          // Normal ground walking acceleration / friction
+          const accel = (moveDir.lengthSq() > 0.01) ? this.groundAccel : this.groundDecel;
+          this.velocity.x = THREE.MathUtils.damp(this.velocity.x, targetVelX, accel, dt);
+          this.velocity.z = THREE.MathUtils.damp(this.velocity.z, targetVelZ, accel, dt);
+
+          // Footstep sounds
+          const horizSpeed = Math.hypot(this.velocity.x, this.velocity.z);
+          if (horizSpeed > 1.2) {
+            this.stepTimer += dt * (input.sprint ? 13 : 9);
+            if (this.stepTimer >= Math.PI) {
+              this.stepTimer -= Math.PI;
+              this.audio.playFootstep(input.sprint);
+            }
           }
         }
-      }
-    } else {
-      // Air acceleration (skill-based air control)
-      if (this.dashDurationTimer <= 0) {
-        this.velocity.x = THREE.MathUtils.damp(this.velocity.x, targetVelX, this.airAccel, dt);
-        this.velocity.z = THREE.MathUtils.damp(this.velocity.z, targetVelZ, this.airAccel, dt);
-        this.velocity.x *= Math.pow(1 - this.airDrag * 0.05, dt * 60);
-        this.velocity.z *= Math.pow(1 - this.airDrag * 0.05, dt * 60);
-      }
+      } else {
+        // Air acceleration (skill-based air control)
+        if (this.dashDurationTimer <= 0) {
+          this.velocity.x = THREE.MathUtils.damp(this.velocity.x, targetVelX, this.airAccel, dt);
+          this.velocity.z = THREE.MathUtils.damp(this.velocity.z, targetVelZ, this.airAccel, dt);
+          this.velocity.x *= Math.pow(1 - this.airDrag * 0.05, dt * 60);
+          this.velocity.z *= Math.pow(1 - this.airDrag * 0.05, dt * 60);
+        }
 
-      // Apply Gravity
-      const currentGrav = this.velocity.y < 0 ? (this.gravity * this.fallGravityMultiplier) : this.gravity;
-      this.velocity.y -= currentGrav * dt;
+        // Apply Gravity
+        const currentGrav = this.velocity.y < 0 ? (this.gravity * this.fallGravityMultiplier) : this.gravity;
+        this.velocity.y -= currentGrav * dt;
+      }
     }
 
     // 6. Integrate Position & Swept Collision Resolution
@@ -311,9 +375,14 @@ export class Player {
     this.physics.resolveCapsuleCollisions(this.position, this.velocity, this.radius, this.height);
 
     // 7. Fall Out-of-Bounds Detection
-    // If player falls below -8m (below ground tarmac) or drops drastically below checkpoint
-    if (this.position.y < -8.0 || (!this.isGrounded && this.position.y < this.respawnPosition.y - 25.0)) {
-      this.triggerFall();
+    if (!this.isJetpackActive) {
+      if (this.position.y < -8.0 || (!this.isGrounded && this.position.y < this.respawnPosition.y - 25.0)) {
+        this.triggerFall();
+      }
+    } else {
+      if (this.position.y < -15.0) {
+        this.triggerFall();
+      }
     }
 
     // Update peak altitude
@@ -333,7 +402,15 @@ export class Player {
       animState = input.sprint ? CharacterAnimState.SPRINT : CharacterAnimState.WALK;
     }
 
-    this.model.update(dt, animState, horizSpeed, this.isGrounded, this.velocity.y);
+    this.model.update(
+      dt,
+      animState,
+      horizSpeed,
+      this.isGrounded,
+      this.velocity.y,
+      this.isJetpackActive,
+      this.isJetpackThrusting
+    );
 
     // Update audio engine with current altitude and vertical velocity
     this.audio.updateAltitude(this.position.y, this.velocity.y);
@@ -421,7 +498,10 @@ export class Player {
       isFalling: this.isFalling,
       fallDistance: Math.round(this.fallDistanceReported * 10) / 10,
       dashCooldown: Math.max(0, Math.round(this.dashCooldown * 10) / 10),
-      maxDashCooldown: this.maxDashCooldown
+      maxDashCooldown: this.maxDashCooldown,
+      isJetpackUnlocked: this.isJetpackUnlocked,
+      isJetpackActive: this.isJetpackActive,
+      isJetpackThrusting: this.isJetpackThrusting
     };
   }
 }

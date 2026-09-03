@@ -55,6 +55,10 @@ export class MockAudioManager {
     this.victoryFanfareCalls++;
   }
 
+  public playCheatUnlocked(): void {}
+  public updateJetpackSound(_isThrusting: boolean, _isActive: boolean): void {}
+  public stopJetpackSound(): void {}
+
   public updateAltitude(altitude: number, verticalVelocity: number): void {
     this.altitudeUpdates.push({ altitude, verticalVelocity });
   }

@@ -29,6 +29,14 @@ export class CharacterModel {
   private rightLegGroup = new THREE.Group();
   private rightShinGroup = new THREE.Group();
 
+  // Jetpack Aerodynamic Booster Wings and Dual Ion Flames
+  private leftWingGroup = new THREE.Group();
+  private rightWingGroup = new THREE.Group();
+  private leftFlameMesh: THREE.Mesh | null = null;
+  private rightFlameMesh: THREE.Mesh | null = null;
+  private leftFlameCore: THREE.Mesh | null = null;
+  private rightFlameCore: THREE.Mesh | null = null;
+
   // Scarf segments
   private scarfSegments: THREE.Mesh[] = [];
   private scarfPoints: THREE.Vector3[] = [];
@@ -168,6 +176,68 @@ export class CharacterModel {
     const rightGlow = new THREE.Mesh(glowGeo, opticalCyanGlowMat);
     rightGlow.position.set(0.08, -0.24, 0);
     this.thrusterPackGroup.add(rightGlow);
+
+    // Deployable Aerodynamic Booster Wings
+    this.leftWingGroup.position.set(-0.13, 0.04, 0);
+    this.rightWingGroup.position.set(0.13, 0.04, 0);
+
+    const wingGeo = new THREE.BoxGeometry(0.18, 0.08, 0.02);
+    const leftWing = new THREE.Mesh(wingGeo, darkTitaniumMat);
+    leftWing.position.set(-0.09, 0, 0);
+    this.leftWingGroup.add(leftWing);
+
+    const rightWing = new THREE.Mesh(wingGeo, darkTitaniumMat);
+    rightWing.position.set(0.09, 0, 0);
+    this.rightWingGroup.add(rightWing);
+
+    // Glowing edge strips on wings
+    const wingStripGeo = new THREE.BoxGeometry(0.16, 0.015, 0.025);
+    const leftWingStrip = new THREE.Mesh(wingStripGeo, opticalCyanGlowMat);
+    leftWingStrip.position.set(-0.09, 0.04, 0);
+    this.leftWingGroup.add(leftWingStrip);
+
+    const rightWingStrip = new THREE.Mesh(wingStripGeo, opticalCyanGlowMat);
+    rightWingStrip.position.set(0.09, 0.04, 0);
+    this.rightWingGroup.add(rightWingStrip);
+
+    this.thrusterPackGroup.add(this.leftWingGroup);
+    this.thrusterPackGroup.add(this.rightWingGroup);
+
+    // Twin Ion Plasma Flame Plumes
+    const flameGeo = new THREE.ConeGeometry(0.065, 0.32, 8);
+    flameGeo.rotateX(Math.PI); // Point downwards
+    const flameMat = new THREE.MeshBasicMaterial({
+      color: 0x00f0ff,
+      transparent: true,
+      opacity: 0.85
+    });
+    const flameCoreGeo = new THREE.ConeGeometry(0.035, 0.22, 8);
+    flameCoreGeo.rotateX(Math.PI);
+    const flameCoreMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.95
+    });
+
+    this.leftFlameMesh = new THREE.Mesh(flameGeo, flameMat);
+    this.leftFlameMesh.position.set(-0.08, -0.40, 0);
+    this.leftFlameMesh.visible = false;
+    this.thrusterPackGroup.add(this.leftFlameMesh);
+
+    this.leftFlameCore = new THREE.Mesh(flameCoreGeo, flameCoreMat);
+    this.leftFlameCore.position.set(-0.08, -0.35, 0);
+    this.leftFlameCore.visible = false;
+    this.thrusterPackGroup.add(this.leftFlameCore);
+
+    this.rightFlameMesh = new THREE.Mesh(flameGeo, flameMat);
+    this.rightFlameMesh.position.set(0.08, -0.40, 0);
+    this.rightFlameMesh.visible = false;
+    this.thrusterPackGroup.add(this.rightFlameMesh);
+
+    this.rightFlameCore = new THREE.Mesh(flameCoreGeo, flameCoreMat);
+    this.rightFlameCore.position.set(0.08, -0.35, 0);
+    this.rightFlameCore.visible = false;
+    this.thrusterPackGroup.add(this.rightFlameCore);
 
     this.torsoGroup.add(this.thrusterPackGroup);
 
@@ -391,7 +461,9 @@ export class CharacterModel {
     state: CharacterAnimState,
     speed: number,
     isGrounded: boolean,
-    verticalVelocity: number
+    verticalVelocity: number,
+    isJetpackActive = false,
+    isJetpackThrusting = false
   ): void {
     this.animTimer += delta;
 
@@ -406,6 +478,38 @@ export class CharacterModel {
     const squashScaleXZ = 1 + this.landSquash * 0.4;
     this.torsoGroup.scale.set(squashScaleXZ, squashScaleY, squashScaleXZ);
 
+    // Jetpack Wing & Flame Animation
+    if (this.leftFlameMesh && this.rightFlameMesh && this.leftFlameCore && this.rightFlameCore) {
+      if (isJetpackActive) {
+        // Deploy aerodynamic booster wings
+        this.leftWingGroup.rotation.z = THREE.MathUtils.lerp(this.leftWingGroup.rotation.z, -0.58, delta * 12);
+        this.rightWingGroup.rotation.z = THREE.MathUtils.lerp(this.rightWingGroup.rotation.z, 0.58, delta * 12);
+
+        this.leftFlameMesh.visible = true;
+        this.rightFlameMesh.visible = true;
+        this.leftFlameCore.visible = true;
+        this.rightFlameCore.visible = true;
+
+        const flameLen = isJetpackThrusting ? (1.4 + Math.random() * 0.4) : (0.55 + Math.random() * 0.15);
+        const coreLen = isJetpackThrusting ? (1.2 + Math.random() * 0.3) : (0.45 + Math.random() * 0.1);
+        const flameWidth = isJetpackThrusting ? (1.2 + Math.random() * 0.2) : 0.8;
+
+        this.leftFlameMesh.scale.set(flameWidth, flameLen, flameWidth);
+        this.rightFlameMesh.scale.set(flameWidth, flameLen, flameWidth);
+        this.leftFlameCore.scale.set(flameWidth, coreLen, flameWidth);
+        this.rightFlameCore.scale.set(flameWidth, coreLen, flameWidth);
+      } else {
+        // Retract wings against body
+        this.leftWingGroup.rotation.z = THREE.MathUtils.lerp(this.leftWingGroup.rotation.z, 0, delta * 12);
+        this.rightWingGroup.rotation.z = THREE.MathUtils.lerp(this.rightWingGroup.rotation.z, 0, delta * 12);
+
+        this.leftFlameMesh.visible = false;
+        this.rightFlameMesh.visible = false;
+        this.leftFlameCore.visible = false;
+        this.rightFlameCore.visible = false;
+      }
+    }
+
     if (state === CharacterAnimState.VICTORY) {
       // Triumphant robot pose
       this.leftArmGroup.rotation.set(-2.8, 0, -0.4);
@@ -418,8 +522,26 @@ export class CharacterModel {
       return;
     }
 
-    if (!isGrounded) {
+    if (isJetpackActive && !isGrounded) {
+      // Dynamic 3D Flight Kinematics
+      const flightPitch = -0.32 - Math.min(0.35, speed / 22);
+      this.torsoGroup.rotation.x = flightPitch;
+      this.headGroup.rotation.x = 0.45;
+
+      this.leftArmGroup.rotation.set(-0.65, 0, -0.25);
+      this.rightArmGroup.rotation.set(-0.65, 0, 0.25);
+      this.leftForearmGroup.rotation.set(0.12, 0, 0);
+      this.rightForearmGroup.rotation.set(0.12, 0, 0);
+
+      this.leftLegGroup.rotation.set(0.42, 0, -0.05);
+      this.rightLegGroup.rotation.set(0.48, 0, 0.05);
+      this.leftShinGroup.rotation.x = -0.25;
+      this.rightShinGroup.rotation.x = -0.20;
+
+      this.torsoGroup.position.y = 0.95;
+    } else if (!isGrounded) {
       // Airborne Jump / Thruster Kinematics
+      this.headGroup.rotation.x = 0;
       if (verticalVelocity > 1) {
         // Jump thruster ascension
         this.leftLegGroup.rotation.x = -0.6;
@@ -449,6 +571,7 @@ export class CharacterModel {
         this.torsoGroup.rotation.x = -0.18;
       }
     } else if (speed > 0.4) {
+      this.headGroup.rotation.x = 0;
       // Crisp Robotic Stride Cycle
       const strideFreq = state === CharacterAnimState.SPRINT ? 14.5 : 10.0;
       const legStride = Math.sin(this.animTimer * strideFreq) * (state === CharacterAnimState.SPRINT ? 0.75 : 0.52);

@@ -25,6 +25,10 @@ export class UIManager {
   private hudZoneBanner!: HTMLElement;
   private hudCheckpointToast!: HTMLElement;
   private hudCellToast!: HTMLElement;
+  private hudCheatToast!: HTMLElement;
+  private hudJetpackBox!: HTMLElement;
+  private hudJetpackBadge!: HTMLElement;
+  private hudJetpackThrustBar!: HTMLElement;
   private fallOverlay!: HTMLElement;
   private fallHeightReport!: HTMLElement;
 
@@ -83,6 +87,10 @@ export class UIManager {
     this.hudZoneBanner = document.getElementById('hud-zone-banner')!;
     this.hudCheckpointToast = document.getElementById('hud-checkpoint-toast')!;
     this.hudCellToast = document.getElementById('hud-cell-toast')!;
+    this.hudCheatToast = document.getElementById('hud-cheat-toast')!;
+    this.hudJetpackBox = document.getElementById('hud-jetpack-box')!;
+    this.hudJetpackBadge = document.getElementById('jetpack-status-badge')!;
+    this.hudJetpackThrustBar = document.getElementById('jetpack-thrust-bar')!;
     this.fallOverlay = document.getElementById('fall-overlay')!;
     this.fallHeightReport = document.getElementById('fall-height-report')!;
 
@@ -240,7 +248,9 @@ export class UIManager {
     dashCooldown = 0,
     maxDashCooldown = 2.4,
     cellsCollected = 0,
-    cellsTotal = 20
+    cellsTotal = 20,
+    isJetpackActive = false,
+    isJetpackThrusting = false
   ): void {
     this.hudAltitude.textContent = altitude.toFixed(1);
     const pct = Math.min(100, Math.max(0, (altitude / 1000) * 100));
@@ -277,8 +287,44 @@ export class UIManager {
       }
     }
 
+    // Jetpack HUD Widget
+    if (this.hudJetpackBox) {
+      if (isJetpackActive) {
+        this.hudJetpackBox.style.display = 'flex';
+        if (isJetpackThrusting) {
+          this.hudJetpackThrustBar.classList.add('thrusting');
+          this.hudJetpackBadge.textContent = 'THRUSTING';
+          this.hudJetpackBadge.style.color = 'var(--accent-gold)';
+          this.hudJetpackBadge.style.borderColor = 'var(--accent-gold)';
+          this.hudJetpackBadge.style.background = 'rgba(255, 183, 3, 0.25)';
+        } else {
+          this.hudJetpackThrustBar.classList.remove('thrusting');
+          this.hudJetpackBadge.textContent = 'HOVER';
+          this.hudJetpackBadge.style.color = 'var(--accent-cyan)';
+          this.hudJetpackBadge.style.borderColor = 'var(--accent-cyan)';
+          this.hudJetpackBadge.style.background = 'rgba(0, 240, 255, 0.2)';
+        }
+      } else {
+        this.hudJetpackBox.style.display = 'none';
+      }
+    }
+
     // Check zone change
     this.checkZoneBanner(altitude);
+  }
+
+  public showCheatToast(message = '⚡ OVERRIDE: ION JETPACK UNLOCKED — FREE FLIGHT ENGAGED! ⚡'): void {
+    if (!this.hudCheatToast) return;
+    this.hudCheatToast.textContent = message;
+    this.hudCheatToast.style.display = 'block';
+    this.hudCheatToast.classList.add('active');
+
+    window.setTimeout(() => {
+      this.hudCheatToast.classList.remove('active');
+      window.setTimeout(() => {
+        this.hudCheatToast.style.display = 'none';
+      }, 400);
+    }, 4000);
   }
 
   public showEnergyCellToast(count: number, total: number): void {

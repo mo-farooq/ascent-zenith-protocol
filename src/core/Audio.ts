@@ -20,6 +20,11 @@ export class AudioManager {
   private windFilter: BiquadFilterNode | null = null;
   private windSource: AudioBufferSourceNode | null = null;
 
+  // Ion Jetpack Audio
+  private jetpackGain: GainNode | null = null;
+  private jetpackFilter: BiquadFilterNode | null = null;
+  private jetpackSource: AudioBufferSourceNode | null = null;
+
   constructor() {}
 
   public init(): void {
@@ -41,6 +46,7 @@ export class AudioManager {
       this.sfxGain.connect(this.masterGain);
 
       this.setupFallWindAudio();
+      this.setupJetpackAudio();
       this.startSereneAmbientMusic();
     } catch (e) {
       console.warn('Web Audio API not supported or blocked', e);
@@ -390,5 +396,80 @@ export class AudioManager {
     this.windGain.connect(this.sfxGain);
 
     this.windSource.start();
+  }
+
+  private setupJetpackAudio(): void {
+    if (!this.ctx || !this.sfxGain) return;
+
+    const bufferSize = this.ctx.sampleRate * 2;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    this.jetpackSource = this.ctx.createBufferSource();
+    this.jetpackSource.buffer = buffer;
+    this.jetpackSource.loop = true;
+
+    this.jetpackFilter = this.ctx.createBiquadFilter();
+    this.jetpackFilter.type = 'bandpass';
+    this.jetpackFilter.frequency.setValueAtTime(550, this.ctx.currentTime);
+    this.jetpackFilter.Q.setValueAtTime(2.5, this.ctx.currentTime);
+
+    this.jetpackGain = this.ctx.createGain();
+    this.jetpackGain.gain.setValueAtTime(0.00001, this.ctx.currentTime);
+
+    this.jetpackSource.connect(this.jetpackFilter);
+    this.jetpackFilter.connect(this.jetpackGain);
+    this.jetpackGain.connect(this.sfxGain);
+
+    this.jetpackSource.start();
+  }
+
+  public updateJetpackSound(isThrusting: boolean, isActive: boolean): void {
+    if (!this.ctx || !this.jetpackGain || !this.jetpackFilter) return;
+    const now = this.ctx.currentTime;
+    if (!isActive) {
+      this.jetpackGain.gain.setTargetAtTime(0.00001, now, 0.08);
+      return;
+    }
+
+    if (isThrusting) {
+      this.jetpackGain.gain.setTargetAtTime(0.24 * this.sfxVolume, now, 0.05);
+      this.jetpackFilter.frequency.setTargetAtTime(1200, now, 0.05);
+    } else {
+      // Gentle hover hum
+      this.jetpackGain.gain.setTargetAtTime(0.07 * this.sfxVolume, now, 0.12);
+      this.jetpackFilter.frequency.setTargetAtTime(480, now, 0.12);
+    }
+  }
+
+  public stopJetpackSound(): void {
+    if (!this.ctx || !this.jetpackGain) return;
+    this.jetpackGain.gain.setTargetAtTime(0.00001, this.ctx.currentTime, 0.06);
+  }
+
+  public playCheatUnlocked(): void {
+    if (!this.ctx || !this.sfxGain) return;
+    const now = this.ctx.currentTime;
+    // Cybernetic 7-note arpeggio chime (C5, E5, G5, C6, E6, G6, C7)
+    const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98, 2093.00];
+    notes.forEach((freq, idx) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'triangle';
+      const t = now + idx * 0.065;
+      osc.frequency.setValueAtTime(freq, t);
+
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.linearRampToValueAtTime(0.22 * this.sfxVolume, t + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+
+      osc.connect(gain);
+      gain.connect(this.sfxGain!);
+      osc.start(t);
+      osc.stop(t + 0.36);
+    });
   }
 }

@@ -292,7 +292,18 @@ export class Game {
         stats.isFalling
       );
 
-      // Update HUD with Dash cooldown and Collectibles progress
+      // Check cheat notification
+      if (inputState.cheatUnlocked === 'JETPACK') {
+        this.uiManager.showCheatToast('⚡ OVERRIDE: ION JETPACK UNLOCKED — FREE FLIGHT ENGAGED! ⚡');
+      } else if (inputState.jetpackTogglePressed && stats.isJetpackUnlocked) {
+        if (stats.isJetpackActive) {
+          this.uiManager.showCheatToast('🚀 JETPACK ONLINE — FREE 3D FLIGHT ACTIVE');
+        } else {
+          this.uiManager.showCheatToast('🛑 JETPACK OFFLINE — STANDARD GRAVITY RESTORED');
+        }
+      }
+
+      // Update HUD with Dash cooldown, Collectibles progress, and Jetpack state
       const progress = this.saveManager.getProgress();
       this.uiManager.updateHUD(
         stats.altitude,
@@ -303,7 +314,9 @@ export class Game {
         stats.dashCooldown,
         stats.maxDashCooldown,
         this.levelBuilder.collectibles.collectedCount,
-        this.levelBuilder.collectibles.totalCount
+        this.levelBuilder.collectibles.totalCount,
+        stats.isJetpackActive,
+        stats.isJetpackThrusting
       );
     } else {
       // In menu or paused: slow orbital rotation for cinematic background
