@@ -5,3 +5,9 @@ dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# AI Agent workspaces & telemetry
+.agents/
+.gemini/
+*.log
+
