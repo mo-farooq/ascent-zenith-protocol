@@ -6,17 +6,33 @@ A physics-driven 3D vertical climbing game inspired by *Getting Over It*, *Only 
 
 ## 🎮 How to Play & Controls
 
-| Control | Action |
-| :--- | :--- |
-| **W, A, S, D** / Arrow Keys | Move climber |
-| **Space** | Jump (Hold for max height; short press for low hop) |
-| **Left Shift** | Sprint (Increases horizontal jump momentum) |
-| **Mouse** | Orbit camera (Click canvas to capture Pointer Lock) |
-| **R** | Quick respawn at latest active checkpoint |
-| **Esc** | Pause menu / Resume |
-| **H** | View in-game controls hint |
+| Control | Action | Details |
+| :--- | :--- | :--- |
+| **W, A, S, D** | Move climber / Directional flight | Traversal across platforms and 3D flight |
+| **Space** | Jump / Jetpack Ascend | Hold for max height; short tap for hop; ascend during flight |
+| **C** / **Ctrl** | Jetpack Descend | Controlled downward glide during flight |
+| **Left Shift** | Sprint / Thruster Boost | Higher horizontal leap speed & supercharged flight |
+| **E** / **Right Click** | Ion Thruster Dash | Forward surge with buoyant upward lift (2.4s cooldown) |
+| **J** | Toggle Jetpack | Instant flight mode toggle |
+| **Mouse** | Orbit Camera | Pitch and yaw perspective control (Pointer Lock) |
+| **R** | Quick Respawn | Teleport immediately to latest activated checkpoint |
+| **Esc** | Pause / Settings | Opens settings, audio sliders, and sensitivity menu |
 
 ---
+
+## 🤫 Secret Easter Egg: Ion Jetpack Protocol
+
+You can activate the anti-gravity jetpack at any time during gameplay via any of the following triggers:
+
+1. **Type the secret override word**: Type `jetpack`, `rocket`, `fly`, or `zenith` anywhere on your keyboard.
+2. **The Classic Konami Code**: Press `↑` `↑` `↓` `↓` `←` `→` `←` `→` `B` `A`.
+3. **Direct Toggle Shortcut**: Press `J`.
+
+### Flight Capabilities
+- **Deployable Booster Wings**: Aerodynamic stabilizer fins extend from the back chassis with cyan photon edge strips.
+- **Dual Ion Plasma Plumes**: Dynamic flame cones flare and pulsate under the thruster nozzles.
+- **Full 3D Vertical & Horizontal Flight**: Fly freely across all 6 zones up to the 1,000m summit with hover stabilization and out-of-bounds fall suspension.
+
 
 ## 🏔 The 1,000-Meter Vertical Course
 
