@@ -9,6 +9,7 @@ export interface InputState {
   mouseWheelDelta: number;
   pausePressed: boolean;
   respawnPressed: boolean;
+  dashPressed: boolean;
 }
 
 export class Input {
@@ -38,10 +39,20 @@ export class Input {
       }
     });
 
+    // Prevent context menu so right-click is dedicated to Thruster Dash
+    canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+    });
+
     canvas.addEventListener('mousedown', (e) => {
       this.isMouseDown = true;
       this.lastMouseX = e.clientX;
       this.lastMouseY = e.clientY;
+
+      if (e.button === 2) {
+        this.justPressed.add('MouseButtonRight');
+      }
+
       if (this.enabled && !this.isLocked) {
         this.requestLock();
       }
@@ -101,7 +112,8 @@ export class Input {
         mouseDeltaY: 0,
         mouseWheelDelta: 0,
         pausePressed: false,
-        respawnPressed: false
+        respawnPressed: false,
+        dashPressed: false
       };
     }
 
@@ -137,6 +149,7 @@ export class Input {
     const sprint = this.isKeyDown('ShiftLeft') || this.isKeyDown('ShiftRight') || (gp ? gp.buttons[10]?.pressed : false);
     const pausePressed = this.consumeJustPressed('Escape') || (gp ? gp.buttons[9]?.pressed : false);
     const respawnPressed = this.consumeJustPressed('KeyR') || (gp ? gp.buttons[8]?.pressed : false);
+    const dashPressed = this.consumeJustPressed('KeyE') || this.consumeJustPressed('KeyQ') || this.consumeJustPressed('MouseButtonRight') || (gp ? gp.buttons[2]?.pressed : false);
 
     const deltaX = this.mouseDeltaX;
     const deltaY = this.mouseDeltaY;
@@ -156,7 +169,8 @@ export class Input {
       mouseDeltaY: deltaY,
       mouseWheelDelta: wheelDelta,
       pausePressed,
-      respawnPressed
+      respawnPressed,
+      dashPressed
     };
   }
 

@@ -203,9 +203,13 @@ export class SwingingPendulum implements UpdatableObstacle {
   }
 }
 
-export class LaunchPad {
+export class LaunchPad implements UpdatableObstacle {
   public mesh: THREE.Mesh;
   public volume: CollisionVolume;
+  private glowRing: THREE.Mesh;
+  private chevrons: THREE.Group = new THREE.Group();
+  private time = Math.random() * 10;
+  private pointLight: THREE.PointLight;
 
   constructor(
     scene: THREE.Scene,
@@ -214,13 +218,13 @@ export class LaunchPad {
     size = new THREE.Vector3(2.5, 0.4, 2.5),
     impulse = 27
   ) {
-    const geo = new THREE.BoxGeometry(size.x, size.y, size.z);
+    const geo = new THREE.CylinderGeometry(size.x * 0.5, size.x * 0.55, size.y, 8);
     const mat = new THREE.MeshStandardMaterial({
-      color: 0x00f0ff,
-      emissive: 0x00a2ff,
-      emissiveIntensity: 0.5,
-      roughness: 0.3,
-      metalness: 0.7,
+      color: 0x0284c7,
+      emissive: 0x00f0ff,
+      emissiveIntensity: 0.8,
+      roughness: 0.2,
+      metalness: 0.85,
       flatShading: true
     });
 
@@ -230,18 +234,57 @@ export class LaunchPad {
     this.mesh.receiveShadow = true;
     scene.add(this.mesh);
 
-    // Hazard ring border
-    const borderGeo = new THREE.BoxGeometry(size.x + 0.3, size.y * 0.8, size.z + 0.3);
-    const borderMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.8 });
-    const borderMesh = new THREE.Mesh(borderGeo, borderMat);
-    borderMesh.position.copy(position);
-    borderMesh.position.y -= 0.05;
-    scene.add(borderMesh);
+    // Hazard dark metallic housing base
+    const baseGeo = new THREE.CylinderGeometry(size.x * 0.58, size.x * 0.64, size.y * 0.9, 8);
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.7, metalness: 0.6 });
+    const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+    baseMesh.position.copy(position);
+    baseMesh.position.y -= 0.05;
+    scene.add(baseMesh);
+
+    // Pulsating cyan induction core
+    const ringGeo = new THREE.TorusGeometry(size.x * 0.32, 0.08, 8, 24);
+    ringGeo.rotateX(Math.PI / 2);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+    this.glowRing = new THREE.Mesh(ringGeo, ringMat);
+    this.glowRing.position.copy(position);
+    this.glowRing.position.y += size.y * 0.52;
+    scene.add(this.glowRing);
+
+    // Floating animated holographic arrows
+    for (let i = 0; i < 3; i++) {
+      const arrowGeo = new THREE.ConeGeometry(0.28, 0.45, 4);
+      arrowGeo.rotateY(Math.PI / 4);
+      const arrowMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.75 });
+      const arrow = new THREE.Mesh(arrowGeo, arrowMat);
+      arrow.position.set(0, 0.4 + i * 0.5, 0);
+      this.chevrons.add(arrow);
+    }
+    this.chevrons.position.copy(position);
+    scene.add(this.chevrons);
+
+    // Point Light
+    this.pointLight = new THREE.PointLight(0x00f0ff, 1.2, 6.0);
+    this.pointLight.position.set(position.x, position.y + 0.8, position.z);
+    scene.add(this.pointLight);
 
     this.volume = new CollisionVolume(VolumeType.LAUNCH_PAD, size.clone().multiplyScalar(0.5), position);
     this.volume.launchImpulse = impulse;
     this.volume.mesh = this.mesh;
     physics.addVolume(this.volume);
+  }
+
+  public update(delta: number): void {
+    this.time += delta;
+    const pulse = 0.6 + Math.sin(this.time * 5.0) * 0.4;
+    (this.mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = pulse;
+    this.glowRing.scale.setScalar(0.95 + pulse * 0.1);
+
+    // Chevron bob and pulse
+    this.chevrons.children.forEach((c, idx) => {
+      c.position.y = 0.4 + idx * 0.45 + Math.sin(this.time * 4 + idx) * 0.12;
+      c.rotation.y += delta * 1.2;
+    });
   }
 }
 

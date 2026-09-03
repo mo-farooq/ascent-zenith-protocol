@@ -617,12 +617,26 @@
             <span class="stat-label">Checkpoint</span>
             <span class="stat-val" id="hud-checkpoint" style="color: var(--accent-green);">BASE</span>
           </div>
+          <div class="stat-item">
+            <span class="stat-label">Energy Cells</span>
+            <span class="stat-val" id="hud-cells" style="color: var(--accent-gold);">0 / 20</span>
+          </div>
+          <div class="stat-item" style="grid-column: span 2; margin-top: 4px;">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 3px;">
+              <span class="stat-label">Ion Thruster</span>
+              <span id="hud-dash-status" style="color: var(--accent-cyan); font-family: var(--font-mono); font-size: 11px; font-weight: 600;">READY</span>
+            </div>
+            <div style="width: 100%; height: 5px; background: rgba(255,255,255,0.12); border-radius: 3px; overflow: hidden;">
+              <div id="hud-dash-bar" style="width: 100%; height: 100%; background: var(--accent-cyan); box-shadow: 0 0 8px var(--accent-cyan); transition: width 0.08s linear;"></div>
+            </div>
+          </div>
         </div>
       </div>
 
       <div class="hud-center">
         <div class="zone-banner" id="hud-zone-banner">ZONE 1: THE YARD</div>
         <div class="checkpoint-toast" id="hud-checkpoint-toast">CHECKPOINT ACTIVATED</div>
+        <div class="checkpoint-toast" id="hud-cell-toast" style="background: rgba(255, 183, 3, 0.2); border-color: rgba(255, 183, 3, 0.6); color: #ffb703; display: none;">ENERGY CELL RESTORED</div>
       </div>
 
       <div class="hud-bottom">
@@ -630,6 +644,7 @@
           <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</span>
           <span><kbd>SPACE</kbd> Jump</span>
           <span><kbd>SHIFT</kbd> Sprint</span>
+          <span><kbd>E</kbd> / <kbd>R-CLICK</kbd> Thruster Dash</span>
           <span><kbd>MOUSE</kbd> Look</span>
           <span><kbd>R</kbd> Respawn</span>
           <span><kbd>ESC</kbd> Pause</span>

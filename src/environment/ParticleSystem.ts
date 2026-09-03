@@ -94,6 +94,28 @@ export class ParticleSystem {
     }
   }
 
+  public emitSparks(pos: THREE.Vector3, count = 18): void {
+    for (let i = 0; i < count; i++) {
+      if (this.particles.length >= this.maxParticles) break;
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1.5 + Math.random() * 4.5;
+
+      this.particles.push({
+        position: new THREE.Vector3(pos.x, pos.y + 0.5, pos.z),
+        velocity: new THREE.Vector3(
+          Math.cos(angle) * speed,
+          1.0 + Math.random() * 3.5,
+          Math.sin(angle) * speed
+        ),
+        color: new THREE.Color(Math.random() > 0.4 ? 0x00f0ff : 0xffb703),
+        size: 4.0,
+        alpha: 1.0,
+        life: 0,
+        maxLife: 0.35 + Math.random() * 0.25
+      });
+    }
+  }
+
   public emitSummitFireworks(pos: THREE.Vector3): void {
     const hues = [0xffb703, 0x00f0ff, 0xff3366, 0x00ff88, 0xffffff];
     for (let i = 0; i < 120; i++) {

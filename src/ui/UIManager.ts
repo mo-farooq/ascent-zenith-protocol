@@ -18,9 +18,13 @@ export class UIManager {
   private hudTimer!: HTMLElement;
   private hudFalls!: HTMLElement;
   private hudCheckpoint!: HTMLElement;
+  private hudCells!: HTMLElement;
+  private hudDashStatus!: HTMLElement;
+  private hudDashBar!: HTMLElement;
   private zoneTag!: HTMLElement;
   private hudZoneBanner!: HTMLElement;
   private hudCheckpointToast!: HTMLElement;
+  private hudCellToast!: HTMLElement;
   private fallOverlay!: HTMLElement;
   private fallHeightReport!: HTMLElement;
 
@@ -72,9 +76,13 @@ export class UIManager {
     this.hudTimer = document.getElementById('hud-timer')!;
     this.hudFalls = document.getElementById('hud-falls')!;
     this.hudCheckpoint = document.getElementById('hud-checkpoint')!;
+    this.hudCells = document.getElementById('hud-cells')!;
+    this.hudDashStatus = document.getElementById('hud-dash-status')!;
+    this.hudDashBar = document.getElementById('hud-dash-bar')!;
     this.zoneTag = document.getElementById('zone-tag')!;
     this.hudZoneBanner = document.getElementById('hud-zone-banner')!;
     this.hudCheckpointToast = document.getElementById('hud-checkpoint-toast')!;
+    this.hudCellToast = document.getElementById('hud-cell-toast')!;
     this.fallOverlay = document.getElementById('fall-overlay')!;
     this.fallHeightReport = document.getElementById('fall-height-report')!;
 
@@ -228,7 +236,11 @@ export class UIManager {
     peak: number,
     timerSeconds: number,
     falls: number,
-    checkpointName: string
+    checkpointName: string,
+    dashCooldown = 0,
+    maxDashCooldown = 2.4,
+    cellsCollected = 0,
+    cellsTotal = 20
   ): void {
     this.hudAltitude.textContent = altitude.toFixed(1);
     const pct = Math.min(100, Math.max(0, (altitude / 1000) * 100));
@@ -244,8 +256,43 @@ export class UIManager {
     this.hudFalls.textContent = falls.toString();
     this.hudCheckpoint.textContent = checkpointName;
 
+    // Energy cells counter
+    if (this.hudCells) {
+      this.hudCells.textContent = `${cellsCollected} / ${cellsTotal}`;
+    }
+
+    // Thruster Dash meter
+    if (this.hudDashStatus && this.hudDashBar) {
+      if (dashCooldown <= 0.05) {
+        this.hudDashStatus.textContent = 'READY';
+        this.hudDashStatus.style.color = 'var(--accent-cyan)';
+        this.hudDashBar.style.width = '100%';
+        this.hudDashBar.style.background = 'var(--accent-cyan)';
+      } else {
+        const remaining = (1 - dashCooldown / maxDashCooldown) * 100;
+        this.hudDashStatus.textContent = `${dashCooldown.toFixed(1)}s`;
+        this.hudDashStatus.style.color = 'var(--accent-gold)';
+        this.hudDashBar.style.width = `${Math.min(100, Math.max(0, remaining))}%`;
+        this.hudDashBar.style.background = 'var(--accent-gold)';
+      }
+    }
+
     // Check zone change
     this.checkZoneBanner(altitude);
+  }
+
+  public showEnergyCellToast(count: number, total: number): void {
+    if (!this.hudCellToast) return;
+    this.hudCellToast.textContent = `⚡ ENERGY CELL RESTORED [ ${count} / ${total} ]`;
+    this.hudCellToast.style.display = 'block';
+    this.hudCellToast.classList.add('active');
+
+    window.setTimeout(() => {
+      this.hudCellToast.classList.remove('active');
+      window.setTimeout(() => {
+        this.hudCellToast.style.display = 'none';
+      }, 400);
+    }, 2500);
   }
 
   private checkZoneBanner(altitude: number): void {

@@ -10,6 +10,10 @@ import { ParticleSystem } from '../environment/ParticleSystem';
 import { LevelBuilder } from '../level/LevelBuilder';
 import { AltitudeMarkers } from '../level/AltitudeMarkers';
 import { UIManager } from '../ui/UIManager';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 
 export enum GameState {
   MENU = 'MENU',
@@ -23,6 +27,7 @@ export class Game {
 
   private canvas: HTMLCanvasElement;
   private renderer: THREE.WebGLRenderer;
+  private composer: EffectComposer;
   private scene: THREE.Scene;
 
   private input: Input;
@@ -78,16 +83,32 @@ export class Game {
     this.skyAtmosphere = new SkyAtmosphere(this.scene);
     this.particles = new ParticleSystem(this.scene);
 
-    // 6. Level Construction
-    this.levelBuilder = new LevelBuilder(this.scene, this.physics);
+    // 6. Post-Processing Pipeline (Bloom, Filmic Tone Mapping, Depth Glow)
+    this.composer = new EffectComposer(this.renderer);
+    const renderPass = new RenderPass(this.scene, this.cameraController.camera);
+    this.composer.addPass(renderPass);
+
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.48, // bloom strength (modern tasteful glow)
+      0.35, // radius
+      0.82  // threshold
+    );
+    this.composer.addPass(bloomPass);
+
+    const outputPass = new OutputPass();
+    this.composer.addPass(outputPass);
+
+    // 7. Level Construction
+    this.levelBuilder = new LevelBuilder(this.scene, this.physics, this.audio);
     this.levelBuilder.buildLevel();
     this.altitudeMarkers = new AltitudeMarkers(this.scene);
 
-    // 7. Player Character
+    // 8. Player Character
     this.player = new Player(this.physics, this.audio);
     this.scene.add(this.player.model.group);
 
-    // 8. Restore Saved Checkpoint or start at Checkpoint 0
+    // 9. Restore Saved Checkpoint or start at Checkpoint 0
     const savedProgress = this.saveManager.getProgress();
     const targetCpId = savedProgress.lastCheckpointId || 'checkpoint_0';
     const initialCp = this.levelBuilder.checkpoints.find(c => c.id === targetCpId) || this.levelBuilder.checkpoints[0];
@@ -99,7 +120,7 @@ export class Game {
     }
     this.cameraController.snapToTarget(this.player.position);
 
-    // 9. Apply saved settings
+    // 10. Apply saved settings
     const savedSettings = this.saveManager.getSettings();
     this.cameraController.sensitivity = savedSettings.mouseSensitivity;
     this.cameraController.baseFov = savedSettings.fov;
@@ -108,7 +129,7 @@ export class Game {
     this.audio.setMusicVolume(savedSettings.musicVolume);
     this.audio.setSfxVolume(savedSettings.sfxVolume);
 
-    // 10. UI Manager
+    // 11. UI Manager
     this.uiManager = new UIManager(this.saveManager, this.audio, {
       onStartGame: () => this.startGame(),
       onResumeGame: () => this.resumeGame(),
@@ -122,7 +143,7 @@ export class Game {
       onRestartGame: () => this.restartEntireGame()
     });
 
-    // 11. Player Fall & Respawn Callbacks
+    // 12. Player Fall, Respawn, and Thruster Dash Callbacks
     this.player.setCallbacks(
       (fallDist) => {
         this.saveManager.recordFall();
@@ -131,8 +152,19 @@ export class Game {
       () => {
         this.uiManager.hideFallOverlay();
         this.cameraController.snapToTarget(this.player.position);
+      },
+      () => {
+        // onDash callback: screen shake and ion thruster particle burst
+        this.cameraController.addTrauma(0.28);
+        this.particles.emitSparks(this.player.position, 16);
       }
     );
+
+    // 13. Collectibles Callback
+    this.levelBuilder.collectibles.setOnCollect((count, total) => {
+      this.uiManager.showEnergyCellToast(count, total);
+      this.particles.emitSparks(this.player.position, 24);
+    });
 
     // Setup Window Resize
     window.addEventListener('resize', () => this.onWindowResize());
@@ -228,7 +260,7 @@ export class Game {
 
       // Update Physics & Obstacles
       this.physics.update(delta);
-      this.levelBuilder.update(delta);
+      this.levelBuilder.update(delta, this.player.position);
 
       // Check Checkpoints
       for (const cp of this.levelBuilder.checkpoints) {
@@ -253,14 +285,18 @@ export class Game {
         stats.isFalling
       );
 
-      // Update HUD
+      // Update HUD with Dash cooldown and Collectibles progress
       const progress = this.saveManager.getProgress();
       this.uiManager.updateHUD(
         stats.altitude,
         progress.highestAltitude,
         this.climbTimer,
         progress.totalFalls,
-        this.activeCheckpointName
+        this.activeCheckpointName,
+        stats.dashCooldown,
+        stats.maxDashCooldown,
+        this.levelBuilder.collectibles.collectedCount,
+        this.levelBuilder.collectibles.totalCount
       );
     } else {
       // In menu or paused: slow orbital rotation for cinematic background
@@ -278,8 +314,8 @@ export class Game {
     this.particles.update(delta);
     this.altitudeMarkers.update();
 
-    // Render Scene
-    this.renderer.render(this.scene, this.cameraController.camera);
+    // Render Scene with Bloom & Filmic Tone Mapping Post-Processing
+    this.composer.render();
 
     this.input.endFrame();
   };
@@ -305,5 +341,7 @@ export class Game {
     this.cameraController.setAspect(width / height);
     this.renderer.setSize(width, height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.composer.setSize(width, height);
+    this.composer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   }
 }

@@ -236,6 +236,61 @@ export class AudioManager {
     osc.stop(now + 0.28);
   }
 
+  public playThrusterDash(): void {
+    if (!this.ctx || !this.sfxGain) return;
+    const now = this.ctx.currentTime;
+
+    // Ion thruster plasma whoosh
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.exponentialRampToValueAtTime(650, now + 0.08);
+    osc.frequency.exponentialRampToValueAtTime(110, now + 0.24);
+
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.28, now + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+
+    // Lowpass filter for warm fullness
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(1400, now);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start(now);
+    osc.stop(now + 0.28);
+  }
+
+  public playCollect(): void {
+    if (!this.ctx || !this.sfxGain) return;
+    const now = this.ctx.currentTime;
+
+    // Sparkly crystal chime: C6 -> G6
+    [1046.50, 1567.98].forEach((freq, idx) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+
+      osc.type = 'sine';
+      const t = now + idx * 0.06;
+      osc.frequency.setValueAtTime(freq, t);
+
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.linearRampToValueAtTime(0.18, t + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+
+      osc.connect(gain);
+      gain.connect(this.sfxGain!);
+
+      osc.start(t);
+      osc.stop(t + 0.5);
+    });
+  }
+
   public playCheckpoint(): void {
     if (!this.ctx || !this.sfxGain) return;
     const now = this.ctx.currentTime;

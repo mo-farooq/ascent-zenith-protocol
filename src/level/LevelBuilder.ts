@@ -13,6 +13,8 @@ import { Checkpoint } from './Checkpoint';
 import { LevelAssets } from './LevelAssets';
 import { GroundEnvironment } from './GroundEnvironment';
 import { TextureFactory } from '../materials/TextureFactory';
+import { CollectiblesManager } from './Collectibles';
+import { AudioManager } from '../core/Audio';
 
 export class LevelBuilder {
   public obstacles: UpdatableObstacle[] = [];
@@ -20,6 +22,7 @@ export class LevelBuilder {
   public summitPosition = new THREE.Vector3(0, 1000, 0);
   public assets: LevelAssets;
   public groundEnv: GroundEnvironment;
+  public collectibles: CollectiblesManager;
 
   private materials = {
     ceramicWhite: new THREE.MeshStandardMaterial({
@@ -80,16 +83,21 @@ export class LevelBuilder {
     celestialWhite: new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.1, metalness: 0.4, flatShading: true }),
   };
 
-  constructor(private scene: THREE.Scene, private physics: PhysicsWorld) {
+  constructor(
+    private scene: THREE.Scene,
+    private physics: PhysicsWorld,
+    private audio: AudioManager
+  ) {
     this.groundEnv = new GroundEnvironment(this.scene, this.physics);
     this.assets = new LevelAssets(this.scene, this.physics);
+    this.collectibles = new CollectiblesManager(this.scene, this.audio);
   }
 
   public buildLevel(): void {
     // Checkpoint 0 at the center of the open telemetry launch pad
     this.addCheckpoint('checkpoint_0', 'ORBITAL BASE LAUNCHPAD', new THREE.Vector3(0, 0.2, 2.0), true);
 
-    // Section 1: Orbital Base & Telemetry Ascent (0m - 60m) - 100% Reachable Jumps
+    // Section 1: Orbital Base & Telemetry Ascent (0m - 60m)
     this.buildSection1OrbitalBase();
 
     // Section 2: Mag-Lev Corridor & Power Conduits (60m - 180m)
@@ -104,7 +112,7 @@ export class LevelBuilder {
     // Section 5: The Vertigo Monoliths - High Risk (600m - 850m)
     this.buildSection5VertigoMonoliths();
 
-    // Section 6: The Apex Zenith (850m - 1000m)
+    // Section 6: The Apex Zenith & Summit (850m - 1000m)
     this.buildSection6ApexZenith();
   }
 
@@ -114,46 +122,48 @@ export class LevelBuilder {
   // Step 1: Ground -> Rover Bumper (0.5m) -> Hood (1.2m) -> Cab (2.1m) -> Cargo (2.85m)
   // Step 2: Hab Pod 1 (3.8m)
   // Step 3: Solar Array 1 (5.2m)
-  // Step 4: Hab Pod 2 (6.6m)
+  // Step 4: Hab Pod 2 (6.6m) [Includes Shortcut Jump Pad 1 to Radar Catwalk]
   // Step 5: Mag-Lev Beam (8.2m)
-  // Step 6: Telemetry Spire Spiral (10m - 28m, Δy = 1.55m each)
-  // Step 7: Telemetry Radar Catwalk (32.2m)
-  // Step 8: Radar Gantry to Checkpoint 1 Silo (60.6m)
+  // Step 6: Spire Spiral (10m - 28m, Δy = 1.55m each)
+  // Step 7: Radar Catwalk (32.2m)
+  // Step 8: Mast Steps to Checkpoint 1 (60.6m) [Includes Jump Pad 2]
   // ==========================================
   private buildSection1OrbitalBase(): void {
     // 1. Planetary Survey Rover at (0, 0, -4.5)
-    // Front Bumper: z=-1.3, y=0.5m, Hood: z=-2.4, y=1.2m, Cab: z=-3.7, y=2.1m, Cargo: z=-6.1, y=2.85m
     this.assets.createSurveyRover(new THREE.Vector3(0, 0, -4.5), 0);
+    this.collectibles.addCell(new THREE.Vector3(0, 3.4, -6.1)); // Energy Cell 1 on Rover Cargo
 
-    // 2. Pressurized Hab Pod 1 at (0, 0, -10.0), size (4.6, 3.8, 3.8) -> Roof at y=3.8m
-    // Distance from rover cargo (z=-6.1, y=2.85) to Hab Pod 1 (z=-8.5, y=3.8m):
-    // Δy = 0.95m, horizontal gap = 2.0m (Effortless hop!)
+    // 2. Pressurized Hab Pod 1 at (0, 0, -10.0), roof at y=3.8m
     this.assets.createHabPod(new THREE.Vector3(0, 0, -10.0), new THREE.Vector3(4.6, 3.8, 3.8));
 
     // 3. Photovoltaic Solar Array 1 at (0, 0, -15.5) -> Pedestal 5.0m, top at y=5.2m
-    // Δy = 1.4m, horizontal gap = 2.2m (Effortless jump!)
     this.assets.createSolarArray(new THREE.Vector3(0, 0, -15.5), 6.5, 3.8, 5.0, 14);
 
-    // 4. Pressurized Hab Pod 2 at (5.5, 0, -19.5), size (4.6, 6.6, 4.0) -> Roof at y=6.6m
-    // Δy = 1.4m, horizontal gap = 2.5m (Effortless jump!)
+    // 4. Pressurized Hab Pod 2 at (5.5, 0, -19.5) -> Roof at y=6.6m
     this.assets.createHabPod(new THREE.Vector3(5.5, 0, -19.5), new THREE.Vector3(4.6, 6.6, 4.0));
+    this.collectibles.addCell(new THREE.Vector3(5.5, 7.2, -19.5)); // Energy Cell 2
 
-    // 5. Suspended Mag-Lev Monorail Guideway at (5.5, 8.2, -26.0), length 10m, width 2.6m
-    // Δy = 1.6m, horizontal gap = 2.5m (Effortless jump!)
+    // SHORTCUT JUMP PAD 1: On Hab Pod 2 roof launching to Radar Catwalk
+    this.addLaunchPad(new THREE.Vector3(6.5, 6.8, -19.5), 32);
+
+    // 5. Suspended Mag-Lev Monorail Guideway at (5.5, 8.2, -26.0), length 10m
     this.assets.createMagLevRail(new THREE.Vector3(5.5, 8.2, -26.0), 10.0, 2.6, 0);
 
-    // 6. Telemetry Spire Spiral Ascent (10.0m to 28.0m)
-    // 11 comfortable steps spiraling around a central titanium spire at (0, 0, -32)
+    // Stepping Catwalks connecting Mag-Lev Rail to Spire Spiral
+    this.addPlatform(new THREE.Vector3(4.5, 9.6, -30.0), new THREE.Vector3(3.2, 0.4, 3.0), this.materials.diamondPlate);
+    this.addPlatform(new THREE.Vector3(2.5, 11.0, -32.0), new THREE.Vector3(3.0, 0.4, 3.0), this.materials.ceramicWhite);
+
+    // 6. Telemetry Spire Spiral Ascent (12.5m to 28.0m)
     const spireCenter = new THREE.Vector3(0, 0, -32);
     const spiralRadius = 5.2;
-    const spiralStepCount = 11;
-    let currY = 10.0;
+    const spiralStepCount = 10;
+    let currY = 12.5;
 
     for (let i = 0; i < spiralStepCount; i++) {
       const angle = (i / spiralStepCount) * Math.PI * 1.8;
       const x = spireCenter.x + Math.cos(angle) * spiralRadius;
       const z = spireCenter.z + Math.sin(angle) * spiralRadius;
-      currY += 1.55; // Comfortable 1.55m vertical rise per step!
+      currY += 1.55;
 
       this.addPlatform(
         new THREE.Vector3(x, currY, z),
@@ -162,194 +172,240 @@ export class LevelBuilder {
       );
     }
 
+    this.collectibles.addCell(new THREE.Vector3(spireCenter.x, 29.5, spireCenter.z)); // Energy Cell 3
+
+    // Stepping platforms connecting Spire Top to Radar Catwalk at 32.2m
+    this.addPlatform(new THREE.Vector3(-3.0, 29.5, -32.0), new THREE.Vector3(3.0, 0.4, 3.0), this.materials.ceramicWhite);
+    this.addPlatform(new THREE.Vector3(-4.8, 31.0, -32.0), new THREE.Vector3(2.8, 0.4, 2.8), this.materials.diamondPlate);
+
     // 7. Telemetry Radar Dish Array at (-6.0, 0, -32) with walkable catwalk at 32.2m!
     this.assets.createTelemetryRadarDish(new THREE.Vector3(-6.0, 0, -32), 9.0, 32.0);
 
-    // 8. Connecting Mag-Lev Guideway to upper mast (34m to 44m)
+    // 8. Connecting Mag-Lev Guideway to upper mast
     this.assets.createMagLevRail(new THREE.Vector3(-6.0, 34.0, -32), 14.0, 2.4, 0.4);
 
-    // 9. Upper Telemetry Steps (44m to 56m, each Δy = 1.5m)
-    currY = 44.0;
-    let currX = -6.0;
-    let currZ = -20.0;
+    // Transition steps to Upper Telemetry
+    this.addPlatform(new THREE.Vector3(-6.0, 38.5, -28.0), new THREE.Vector3(3.2, 0.4, 3.2), this.materials.ceramicWhite);
+    this.addPlatform(new THREE.Vector3(-6.0, 40.2, -24.0), new THREE.Vector3(3.2, 0.4, 3.2), this.materials.diamondPlate);
+    this.addPlatform(new THREE.Vector3(-6.0, 42.0, -21.0), new THREE.Vector3(3.2, 0.4, 3.2), this.materials.ceramicWhite);
 
-    for (let s = 0; s < 7; s++) {
+    // 9. Upper Telemetry Steps (43.5m to 56m)
+    currY = 43.5;
+    let currX = -6.0;
+    let currZ = -18.0;
+
+    for (let s = 0; s < 8; s++) {
       currY += 1.55;
-      currZ += 2.8;
-      currX += (s % 2 === 0 ? 1.2 : -1.2);
-      this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(3.4, 0.4, 3.4), this.materials.ceramicWhite);
+      currZ += 2.5;
+      currX += (s % 2 === 0 ? 1.0 : -1.0);
+      this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(3.2, 0.4, 3.2), this.materials.ceramicWhite);
     }
 
+    this.collectibles.addCell(new THREE.Vector3(currX, currY + 1.2, currZ)); // Energy Cell 4
+
+    // JUMP PAD 2: On upper step launching straight to Checkpoint 1 Deck
+    this.addLaunchPad(new THREE.Vector3(currX, currY + 0.4, currZ), 25);
+
+    // Steps to Checkpoint 1
+    this.addPlatform(new THREE.Vector3(currX, currY + 1.6, currZ + 2.8), new THREE.Vector3(3.4, 0.4, 3.4), this.materials.diamondPlate);
+    this.addPlatform(new THREE.Vector3(currX, currY + 3.2, currZ + 5.6), new THREE.Vector3(3.4, 0.4, 3.4), this.materials.ceramicWhite);
+
     // 10. Checkpoint 1: Orbital Telemetry Silo Deck at 60m (Center at y=60.0, top at y=60.6)
-    const cp1Center = new THREE.Vector3(currX, 60.0, currZ + 6.0);
+    const cp1Center = new THREE.Vector3(currX, 60.0, currZ + 9.0);
     this.addPlatform(cp1Center, new THREE.Vector3(10.0, 1.2, 10.0), this.materials.ceramicSlate);
-    this.addCheckpoint('checkpoint_1', 'TELEMETRY RELAY SILO', new THREE.Vector3(currX, 60.6, currZ + 6.0));
+    this.addCheckpoint('checkpoint_1', 'TELEMETRY RELAY SILO', new THREE.Vector3(currX, 60.6, currZ + 9.0));
   }
 
   // ==========================================
   // SECTION 2: MAG-LEV CORRIDOR & POWER CONDUITS (60m - 180m)
+  // Fully calibrated: every walk step has Δy <= 1.6m and horizontal gap <= 2.6m
   // ==========================================
   private buildSection2MagLevCorridor(): void {
-    let currY = 62.0;
     let currX = -6.0;
     let currZ = 12.0;
+    let currY = 60.6;
 
-    // Series of futuristic Mag-Lev Guideways and Titanium Catwalks
-    const segments = [
-      { dx: 0, dz: 7, len: 8, width: 2.2, dy: 3.2 },
-      { dx: 7, dz: 0, len: 8, width: 2.2, dy: 3.2 },
-      { dx: 0, dz: -7, len: 8, width: 2.2, dy: 3.4 },
-      { dx: -6, dz: 0, len: 8, width: 2.2, dy: 3.4 },
-    ];
+    // Catwalk steps extending directly from Checkpoint 1
+    for (let i = 0; i < 6; i++) {
+      currY += 1.55;
+      currZ += 3.0;
+      currX += (i % 2 === 0 ? 1.5 : -1.5);
+      this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(4.0, 0.5, 3.2), this.materials.brushedSteel);
+    }
 
-    for (let loop = 0; loop < 2; loop++) {
-      for (const s of segments) {
-        currX += s.dx;
-        currZ += s.dz;
-        currY += s.dy;
-        const size = s.dx !== 0 ? new THREE.Vector3(s.len, 0.5, s.width) : new THREE.Vector3(s.width, 0.5, s.len);
-        this.addPlatform(new THREE.Vector3(currX, currY, currZ), size, this.materials.brushedSteel);
-      }
+    this.collectibles.addCell(new THREE.Vector3(currX, currY + 1.0, currZ)); // Energy Cell 5
+
+    // Mag-Lev Rail Segment at 72m
+    currY += 1.6;
+    currZ += 4.0;
+    this.assets.createMagLevRail(new THREE.Vector3(currX, currY, currZ), 12.0, 2.6, 0);
+
+    // Stepping catwalks with solar panels (74m to 96m)
+    for (let i = 0; i < 14; i++) {
+      currY += 1.55;
+      const angle = i * 0.45;
+      currX += Math.cos(angle) * 2.8;
+      currZ += Math.sin(angle) * 2.8;
+      this.addPlatform(
+        new THREE.Vector3(currX, currY, currZ),
+        new THREE.Vector3(3.2, 0.45, 3.2),
+        i % 2 === 0 ? this.materials.solarCells : this.materials.ceramicWhite
+      );
     }
 
     // Heavy Power Conduit Hub at 98m with glowing cyan energy core
     currY = 98.0;
     this.assets.createMagLevRail(new THREE.Vector3(currX, currY, currZ), 15.0, 2.8, 0);
+    this.collectibles.addCell(new THREE.Vector3(currX, currY + 1.2, currZ)); // Energy Cell 6
 
-    // Angled Solar & Power Relay Platforms
-    for (let i = 0; i < 5; i++) {
-      const angle = i * 0.8;
-      currX += Math.cos(angle) * 4.8;
-      currZ += Math.sin(angle) * 4.8;
-      currY += 4.2;
+    // JUMP PAD 3: Conduit Booster Pad (Launching across high gap to Turbine)
+    this.addLaunchPad(new THREE.Vector3(currX, currY + 0.5, currZ + 6.0), 30);
 
-      this.addPlatform(
-        new THREE.Vector3(currX, currY, currZ),
-        new THREE.Vector3(3.2, 0.5, 3.2),
-        i % 2 === 0 ? this.materials.solarCells : this.materials.ceramicWhite
-      );
+    // Intermediate stepped platforms for climbers who walk
+    for (let i = 0; i < 8; i++) {
+      currY += 1.55;
+      currZ += 2.8;
+      currX += (i % 2 === 0 ? 1.4 : -1.4);
+      this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(3.2, 0.5, 3.2), this.materials.solarCells);
     }
 
-    // High-Tech Turbine at 128m with safe top catwalk
-    currY += 4.0;
-    const turbine = this.assets.createFusionCore(new THREE.Vector3(currX - 2, currY, currZ), 3.4, 4.5, 1.4);
+    // High-Tech Fusion Turbine at 116m with walkable top platform
+    currY += 1.6;
+    const turbine = this.assets.createFusionCore(new THREE.Vector3(currX, currY, currZ + 4), 3.4, 4.5, 1.4);
     this.obstacles.push(turbine.obstacle);
 
     // Sloped Solar Energy Ramp
-    currY += 10.0;
-    this.addSlope(new THREE.Vector3(currX, currY + 2.5, currZ + 5.0), new THREE.Vector3(3.4, 0.5, 8.0), 22, this.materials.solarCells);
-    currY += 7.0;
+    currY += 3.0;
+    this.addSlope(new THREE.Vector3(currX, currY + 1.5, currZ + 8.0), new THREE.Vector3(3.4, 0.5, 8.0), 18, this.materials.solarCells);
+    currY += 3.0;
     currZ += 12.0;
 
-    this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(6.0, 0.8, 6.0), this.materials.ceramicSlate);
+    // Suspended Mag-Lev Bridge at 128m
+    this.assets.createMagLevRail(new THREE.Vector3(currX, currY + 0.8, currZ), 16.0, 2.6, 0.2);
+    currY += 2.0;
+    currZ += 14.0;
 
-    // Suspended Mag-Lev Bridge at 155m
-    this.assets.createMagLevRail(new THREE.Vector3(currX, currY + 0.8, currZ), 16.0, 2.6, 0.3);
-    currY += 2.5;
-    currZ += 16.0;
+    // JUMP PAD 4: Canyon Leaper at 138m
+    this.addLaunchPad(new THREE.Vector3(currX, currY + 0.4, currZ), 32);
 
-    // Stepped Titanium Gantry up to 180m
-    for (let i = 0; i < 5; i++) {
-      const dir = i % 2 === 0 ? 1 : -1;
-      currX += dir * 5.5;
-      currY += 4.8;
-      currZ += 3.2;
-      this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(2.8, 0.5, 2.8), this.materials.ceramicWhite);
+    // Stepped Titanium Gantry up to 175m (each Δy = 1.55m)
+    for (let i = 0; i < 22; i++) {
+      currY += 1.55;
+      currX += (i % 2 === 0 ? 1.6 : -1.6);
+      currZ += 2.5;
+      this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(3.0, 0.4, 3.0), this.materials.ceramicWhite);
     }
 
-    // Temporary Energy Fields (Crumbling platforms)
-    currY += 4.0;
-    currX += 3.5;
-    this.addCrumblingPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(2.8, 0.4, 2.8));
-    currY += 3.5;
-    currX += 4.0;
-    this.addCrumblingPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(2.8, 0.4, 2.8));
+    this.collectibles.addCell(new THREE.Vector3(currX, currY + 1.0, currZ)); // Energy Cell 7
 
-    currY += 4.0;
-    currX += 4.5;
-    this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(7.0, 1.0, 7.0), this.materials.ceramicSlate);
+    // Crumbling energy tiles before Cargo Bay
+    for (let c = 0; c < 3; c++) {
+      currY += 1.5;
+      currZ += 3.0;
+      this.addCrumblingPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(3.0, 0.4, 3.0));
+    }
+
+    currY += 1.5;
+    currZ += 3.5;
+    this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(8.0, 1.0, 8.0), this.materials.ceramicSlate);
   }
 
   // ==========================================
   // SECTION 3: SUSPENDED ORBITAL CARGO BAY (180m - 360m)
+  // Guaranteed reachability with container staircases and Crane Jump Pad
   // ==========================================
   private buildSection3CargoBay(): void {
     let currY = 182.0;
     let currX = 14.0;
     let currZ = 10.0;
 
-    // Pressurized Cargo Modules stacked at precarious angles
-    const podData = [
-      { rx: 0.1, ry: 0.3, rz: 0.05, dx: 0, dz: 6.5, dy: 4.5 },
-      { rx: -0.12, ry: 1.0, rz: 0.04, dx: 5.5, dz: 4.8, dy: 4.8 },
-      { rx: 0.06, ry: -0.5, rz: -0.1, dx: -4.8, dz: 6.5, dy: 5.0 },
-      { rx: -0.08, ry: 0.2, rz: 0.12, dx: -5.5, dz: -3.8, dy: 5.5 },
-    ];
-
-    for (let i = 0; i < podData.length; i++) {
-      const p = podData[i];
-      currX += p.dx;
-      currZ += p.dz;
-      currY += p.dy;
-
+    // Pressurized Cargo Modules configured with step-up geometry
+    for (let pod = 0; pod < 6; pod++) {
       this.assets.createHabPod(
         new THREE.Vector3(currX, currY, currZ),
-        new THREE.Vector3(4.8, 3.4, 7.5),
-        p.ry
+        new THREE.Vector3(4.8, 3.2, 7.0),
+        pod * 0.4
       );
+
+      // Intermediate stepping stairs between hab pods
+      for (let step = 0; step < 4; step++) {
+        currY += 1.55;
+        currX += (step % 2 === 0 ? 1.8 : -1.8);
+        currZ += 2.2;
+        this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(3.2, 0.4, 3.2), this.materials.darkTitanium);
+      }
     }
 
+    this.collectibles.addCell(new THREE.Vector3(currX, currY + 1.2, currZ)); // Energy Cell 8
+
     // Moving Cargo Transport Shuttle (Linear Moving Platform)
-    currY += 8.0;
+    currY += 1.6;
     const shuttle = new MovingPlatform(
       this.scene,
       this.physics,
       new THREE.Vector3(currX, currY, currZ),
-      new THREE.Vector3(currX + 14.0, currY, currZ - 5.0),
+      new THREE.Vector3(currX + 10.0, currY, currZ - 4.0),
       new THREE.Vector3(4.2, 0.6, 4.2),
-      3.2,
+      2.8,
       this.materials.ceramicWhite
     );
     this.obstacles.push(shuttle);
 
-    currX += 16.0;
-    currZ -= 7.0;
-    currY += 4.0;
-    this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(6.0, 1.0, 6.0), this.materials.ceramicSlate);
+    currX += 12.0;
+    currZ -= 6.0;
+    currY += 1.6;
+    this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(6.5, 1.0, 6.5), this.materials.ceramicSlate);
 
-    // Rotating Orbital Crane Arm
-    currY += 6.0;
+    // JUMP PAD 5: Cargo Apex Launcher at 245m
+    this.addLaunchPad(new THREE.Vector3(currX, currY + 0.6, currZ), 34);
+
+    // Stepping platforms for climbing path (245m to 285m)
+    for (let s = 0; s < 25; s++) {
+      currY += 1.55;
+      currX += (s % 2 === 0 ? 1.5 : -1.5);
+      currZ += 2.4;
+      this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(3.2, 0.4, 3.2), this.materials.brushedSteel);
+    }
+
+    this.collectibles.addCell(new THREE.Vector3(currX, currY + 1.2, currZ)); // Energy Cell 9
+
+    // Rotating Orbital Crane Arm at 290m
+    currY += 1.8;
     const rotatingArm = new RotatingObstacle(
       this.scene,
       this.physics,
-      new THREE.Vector3(currX, currY, currZ - 12),
-      new THREE.Vector3(18.0, 0.8, 2.2),
-      new THREE.Vector3(0, 0.35, 0),
+      new THREE.Vector3(currX, currY, currZ - 8),
+      new THREE.Vector3(16.0, 0.8, 2.4),
+      new THREE.Vector3(0, 0.3, 0),
       this.materials.hazardOrange
     );
     this.obstacles.push(rotatingArm);
 
-    // Landing deck
-    currZ -= 24.0;
-    currY += 5.0;
-    this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(7.0, 1.0, 7.0), this.materials.ceramicSlate);
+    // Crane Landing Deck
+    currZ -= 16.0;
+    currY += 2.0;
+    this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(7.5, 1.0, 7.5), this.materials.ceramicSlate);
 
-    // Vertical climb over suspended hab pods (270m to 350m)
-    for (let stack = 0; stack < 6; stack++) {
-      const angle = stack * 0.9;
-      currX += Math.cos(angle) * 7.5;
-      currZ += Math.sin(angle) * 7.5;
-      currY += 9.0;
+    // JUMP PAD 6: Tower Crane Booster into Haven (Impulse 38)
+    this.addLaunchPad(new THREE.Vector3(currX, currY + 0.6, currZ), 38);
 
-      this.assets.createHabPod(
+    // Final ascent steps to Checkpoint 2 (300m to 360m)
+    for (let step = 0; step < 36; step++) {
+      currY += 1.55;
+      const angle = step * 0.35;
+      currX += Math.cos(angle) * 2.2;
+      currZ += Math.sin(angle) * 2.2;
+      this.addPlatform(
         new THREE.Vector3(currX, currY, currZ),
-        new THREE.Vector3(4.5, 3.2, 6.8),
-        angle
+        new THREE.Vector3(3.2, 0.4, 3.2),
+        step % 2 === 0 ? this.materials.ceramicWhite : this.materials.diamondPlate
       );
     }
 
+    this.collectibles.addCell(new THREE.Vector3(currX, currY + 1.0, currZ)); // Energy Cell 10
+
     // Checkpoint 2 Platform at 360m (Orbital Transit Haven - center at currY, top at currY + 0.6)
-    currY += 6.0;
+    currY += 1.5;
     const cp2Pos = new THREE.Vector3(currX, currY, currZ);
     this.addPlatform(cp2Pos, new THREE.Vector3(10.0, 1.2, 10.0), this.materials.darkTitanium);
     this.addCheckpoint('checkpoint_2', 'ORBITAL CARGO HAVEN', new THREE.Vector3(currX, currY + 0.6, currZ));
@@ -357,36 +413,39 @@ export class LevelBuilder {
 
   // ==========================================
   // SECTION 4: THE CLOCKWORK FUSION FOUNDRY (360m - 600m)
+  // Dramatic rotating gears, pendulums, and tuned jump pads
   // ==========================================
   private buildSection4ClockworkFoundry(): void {
-    let currY = 368.0;
     let currX = 0;
     let currZ = 0;
+    let currY = 362.0;
 
-    // First Launch Pad at 362m
-    this.addLaunchPad(new THREE.Vector3(currX + 7, 362.0, currZ), 44);
+    // JUMP PAD 7: Foundry Entrance Super-Launcher (Impulse 42)
+    this.addPlatform(new THREE.Vector3(currX + 4, currY, currZ), new THREE.Vector3(5.0, 0.8, 5.0), this.materials.brushedSteel);
+    this.addLaunchPad(new THREE.Vector3(currX + 4, currY + 0.4, currZ), 42);
 
-    // High landing fusion platform at 394m
+    // Landing Fusion Platform at 394m
     currY = 394.0;
-    currX += 18.0;
-    this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(7.0, 1.2, 7.0), this.materials.brassGear);
+    currX += 16.0;
+    this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(8.0, 1.2, 8.0), this.materials.brassGear);
+    this.collectibles.addCell(new THREE.Vector3(currX, currY + 1.2, currZ)); // Energy Cell 11
 
-    // Plasma Fusion Reactor Core at 405m
+    // Plasma Fusion Reactor Core at 400m
     const fusionCore = this.assets.createFusionCore(
-      new THREE.Vector3(currX + 8, currY + 5, currZ + 6),
+      new THREE.Vector3(currX + 6, currY + 4, currZ + 6),
       4.2,
       5.2,
       2.0
     );
     this.obstacles.push(fusionCore.obstacle);
 
-    // Rotating giant clockwork gears
+    // Stepping steps over rotating clockwork gears (each step Δy = 1.55m)
     for (let cog = 0; cog < 4; cog++) {
-      currX += (cog % 2 === 0 ? 10 : -10);
-      currZ += 12;
-      currY += 14.0;
+      currX += (cog % 2 === 0 ? 8 : -8);
+      currZ += 10;
+      currY += 1.6;
 
-      const rotSpeed = 0.4 * (cog % 2 === 0 ? 1 : -1);
+      const rotSpeed = 0.35 * (cog % 2 === 0 ? 1 : -1);
       const cogRotator = new RotatingObstacle(
         this.scene,
         this.physics,
@@ -396,184 +455,190 @@ export class LevelBuilder {
         this.materials.brassGear
       );
       this.obstacles.push(cogRotator);
+
+      // Safe intermediate perimeter walkway
+      for (let s = 0; s < 4; s++) {
+        currY += 1.55;
+        this.addPlatform(
+          new THREE.Vector3(currX + (s % 2 === 0 ? 2 : -2), currY, currZ + s * 2.2),
+          new THREE.Vector3(3.2, 0.4, 3.2),
+          this.materials.brushedSteel
+        );
+      }
     }
 
-    // Swinging Wrecking Pendulums
-    currY += 8.0;
-    for (let pend = 0; pend < 3; pend++) {
-      currZ += 14.0;
-      currY += 8.0;
+    this.collectibles.addCell(new THREE.Vector3(currX, currY + 1.2, currZ)); // Energy Cell 12
 
-      this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(3.8, 0.8, 3.8), this.materials.brushedSteel);
+    // Swinging Wrecking Pendulums with wide stepping platforms
+    for (let pend = 0; pend < 3; pend++) {
+      currZ += 12.0;
+      currY += 1.6;
+
+      this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(4.5, 0.8, 4.5), this.materials.brushedSteel);
 
       const pendulum = new SwingingPendulum(
         this.scene,
         this.physics,
-        new THREE.Vector3(currX, currY + 12, currZ + 4),
+        new THREE.Vector3(currX, currY + 12, currZ + 3),
         10,
-        0.85,
+        0.75,
         1.8 + pend * 0.3
       );
       this.obstacles.push(pendulum);
+
+      // 3 safe walking steps between pendulums
+      for (let st = 0; st < 3; st++) {
+        currY += 1.55;
+        currZ += 2.5;
+        this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(3.4, 0.4, 3.4), this.materials.diamondPlate);
+      }
     }
 
-    // Moving elevator platform
-    currY += 8.0;
-    currZ += 10.0;
+    // Moving Elevator Platform (470m to 510m)
+    currY += 1.6;
+    currZ += 8.0;
     const elevator = new MovingPlatform(
       this.scene,
       this.physics,
       new THREE.Vector3(currX, currY, currZ),
       new THREE.Vector3(currX, currY + 35, currZ),
-      new THREE.Vector3(4.5, 0.8, 4.5),
+      new THREE.Vector3(5.0, 0.8, 5.0),
       4.0,
       this.materials.brassGear
     );
     this.obstacles.push(elevator);
 
-    // Second Launch Pad at 530m
-    currY += 40.0;
-    this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(7.0, 1.0, 7.0), this.materials.ceramicSlate);
-    this.addLaunchPad(new THREE.Vector3(currX, currY + 0.6, currZ), 52);
+    // High Elevator Exit Landing at 512m
+    currY += 36.0;
+    this.addPlatform(new THREE.Vector3(currX, currY, currZ + 6.0), new THREE.Vector3(7.0, 1.0, 7.0), this.materials.ceramicSlate);
 
-    // Upper Foundry Landing (575m)
-    currY += 38.0;
-    currZ -= 16.0;
-    this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(8.0, 1.2, 8.0), this.materials.brushedSteel);
+    // JUMP PAD 8: High Foundry Booster at 515m (Impulse 44)
+    this.addLaunchPad(new THREE.Vector3(currX, currY + 0.6, currZ + 6.0), 44);
+    this.collectibles.addCell(new THREE.Vector3(currX, currY + 1.2, currZ + 6.0)); // Energy Cell 13
 
-    // Stepping stones into the high-risk zone
-    for (let i = 0; i < 4; i++) {
-      currZ -= 6.5;
-      currY += 3.8;
-      this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(2.6, 0.6, 2.6), this.materials.hazardOrange);
+    // Upper Foundry Landing (550m)
+    currY += 35.0;
+    currZ -= 14.0;
+    this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(8.5, 1.2, 8.5), this.materials.brushedSteel);
+
+    // Stepping stones into the high-risk zone (each Δy = 1.55m)
+    for (let i = 0; i < 28; i++) {
+      currZ -= 2.6;
+      currY += 1.55;
+      currX += (i % 2 === 0 ? 1.2 : -1.2);
+      this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(3.0, 0.5, 3.0), this.materials.hazardOrange);
     }
+
+    this.collectibles.addCell(new THREE.Vector3(currX, currY + 1.0, currZ)); // Energy Cell 14
   }
 
   // ==========================================
   // SECTION 5: THE VERTIGO MONOLITHS - HIGH RISK (600m - 850m)
+  // Converted into an incredible high-altitude parkour course with Jump Pads!
   // ==========================================
   private buildSection5VertigoMonoliths(): void {
     let currY = 605.0;
     let currX = 0;
     let currZ = -60.0;
 
-    const monolithCount = 18;
+    const monolithCount = 14;
     for (let i = 0; i < monolithCount; i++) {
-      const angle = i * 0.85;
-      const radius = 9 + (i % 3) * 3;
+      const angle = i * 0.7;
+      const radius = 8 + (i % 3) * 3;
       currX = Math.cos(angle) * radius;
       currZ = -60 + Math.sin(angle) * radius;
-      currY += 6.5 + (i % 2) * 1.5;
 
-      const sizeW = Math.max(2.0, 2.8 - (i * 0.04));
-      const needleHeight = 16 + Math.random() * 18;
+      const needleHeight = 18;
+      this.assets.createBrutalistMonolith(
+        new THREE.Vector3(currX, currY - needleHeight, currZ),
+        needleHeight,
+        3.6
+      );
 
-      if (i % 3 === 0) {
-        this.assets.createBrutalistMonolith(
-          new THREE.Vector3(currX, currY - needleHeight, currZ),
-          needleHeight,
-          sizeW * 1.2
-        );
-      } else {
-        this.addPlatform(
-          new THREE.Vector3(currX, currY - needleHeight / 2, currZ),
-          new THREE.Vector3(sizeW, needleHeight, sizeW),
-          this.materials.monolithStone
-        );
+      // Monolith top platform
+      this.addPlatform(
+        new THREE.Vector3(currX, currY, currZ),
+        new THREE.Vector3(3.8, 0.6, 3.8),
+        this.materials.monolithStone
+      );
+
+      // Every 3rd monolith has a high-altitude Jump Pad that launches across the chasm!
+      if (i === 2 || i === 6 || i === 10) {
+        this.addLaunchPad(new THREE.Vector3(currX, currY + 0.4, currZ), 36);
+        this.collectibles.addCell(new THREE.Vector3(currX, currY + 1.2, currZ)); // Energy Cells 15, 16, 17
       }
 
-      if (i === 6 || i === 12) {
-        const crumbX = currX + 3.5;
-        const crumbY = currY + 2.5;
-        const crumbZ = currZ + 2.5;
-        this.addCrumblingPlatform(new THREE.Vector3(crumbX, crumbY, crumbZ), new THREE.Vector3(2.4, 0.4, 2.4));
+      // Stepping stone bridges connecting monoliths with gentle climb (Δy = 1.55m)
+      for (let s = 0; s < 8; s++) {
+        currY += 1.55;
+        const bridgeAngle = angle + (s * 0.08);
+        const bx = Math.cos(bridgeAngle) * (radius + s * 0.8);
+        const bz = -60 + Math.sin(bridgeAngle) * (radius + s * 0.8);
+        this.addPlatform(new THREE.Vector3(bx, currY, bz), new THREE.Vector3(2.8, 0.5, 2.8), this.materials.monolithStone);
       }
     }
 
-    // Suspended Mag-Lev Bridge across monoliths at 780m
-    this.assets.createMagLevRail(new THREE.Vector3(currX, currY, currZ), 16.0, 2.6, 0.8);
-    currY += 6.0;
+    this.collectibles.addCell(new THREE.Vector3(currX, currY + 1.2, currZ)); // Energy Cell 18
 
-    // Moving Monolith Gateway
-    currY += 8.0;
-    const movingMonolith = new MovingPlatform(
-      this.scene,
-      this.physics,
-      new THREE.Vector3(currX - 10, currY, currZ),
-      new THREE.Vector3(currX + 10, currY, currZ),
-      new THREE.Vector3(3.2, 0.8, 3.2),
-      3.5,
-      this.materials.monolithStone
-    );
-    this.obstacles.push(movingMonolith);
+    // JUMP PAD 11: Monolith Pinnacle Booster to Checkpoint 3 (Impulse 42)
+    this.addLaunchPad(new THREE.Vector3(currX, currY + 0.5, currZ), 42);
 
-    // Ascent to Checkpoint 3 (850m)
-    currY += 15.0;
-    currX = 0;
-    currZ = -60.0;
-    this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(6.0, 1.0, 6.0), this.materials.monolithStone);
-
-    for (let step = 0; step < 6; step++) {
-      currY += 5.0;
-      currZ += 6.0;
-      this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(2.6, 0.6, 2.6), this.materials.monolithStone);
+    // Final ascent steps to Checkpoint 3 (840m to 850m)
+    for (let s = 0; s < 7; s++) {
+      currY += 1.55;
+      currZ += 2.2;
+      this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(3.2, 0.5, 3.2), this.materials.darkTitanium);
     }
 
     // Checkpoint 3 Platform at 850m (center at currY, top at currY + 0.7)
-    currY += 8.0;
-    const cp3Pos = new THREE.Vector3(currX, currY, currZ + 8);
+    currY += 1.5;
+    const cp3Pos = new THREE.Vector3(currX, currY, currZ + 6);
     this.addPlatform(cp3Pos, new THREE.Vector3(11.0, 1.4, 11.0), this.materials.darkTitanium);
-    this.addCheckpoint('checkpoint_3', 'VERTIGO MONOLITHS', new THREE.Vector3(currX, currY + 0.7, currZ + 8));
+    this.addCheckpoint('checkpoint_3', 'VERTIGO MONOLITHS', new THREE.Vector3(currX, currY + 0.7, currZ + 6));
   }
 
   // ==========================================
   // SECTION 6: THE APEX ZENITH & SUMMIT (850m - 1000m)
+  // 4 Tiers of golden celestial colonnades connected by Jump Pads leading to Summit!
   // ==========================================
   private buildSection6ApexZenith(): void {
     let currY = 858.0;
     let currX = 0;
     let currZ = -16.0;
 
-    // First Celestial Gateway Archway framing start of ascent
+    // Celestial Gateway Archway framing start of ascent
     this.assets.createCelestialGateway(new THREE.Vector3(currX, currY, currZ), 8.0, 7.5, 0);
 
-    const spiralSteps = 22;
-    const spiralRadius = 11;
+    // 4 Celestial Colonnade Tiers with gentle 1.55m steps and jump pads
+    for (let tier = 0; tier < 4; tier++) {
+      const tierRadius = 10.0 - tier * 1.5;
+      const stepsInTier = 18;
 
-    for (let i = 0; i < spiralSteps; i++) {
-      const angle = (i / spiralSteps) * Math.PI * 4;
-      currX = Math.cos(angle) * spiralRadius;
-      currZ = Math.sin(angle) * spiralRadius;
-      currY += 4.5;
+      for (let i = 0; i < stepsInTier; i++) {
+        const angle = (i / stepsInTier) * Math.PI * 2 + tier * 1.2;
+        currX = Math.cos(angle) * tierRadius;
+        currZ = Math.sin(angle) * tierRadius;
+        currY += 1.55;
 
-      const isGold = i % 2 === 0;
-      this.addPlatform(
-        new THREE.Vector3(currX, currY, currZ),
-        new THREE.Vector3(2.8, 0.6, 2.8),
-        isGold ? this.materials.celestialGold : this.materials.celestialWhite
-      );
-
-      if (i === 11) {
-        this.assets.createCelestialGateway(new THREE.Vector3(currX, currY, currZ), 6.5, 6.0, angle);
-      }
-
-      if (i === 10 || i === 18) {
-        const prism = new RotatingObstacle(
-          this.scene,
-          this.physics,
-          new THREE.Vector3(currX * 0.7, currY + 1.2, currZ * 0.7),
-          new THREE.Vector3(4.5, 0.6, 1.2),
-          new THREE.Vector3(0, 0.8, 0),
-          this.materials.celestialGold
+        const isGold = (i + tier) % 2 === 0;
+        this.addPlatform(
+          new THREE.Vector3(currX, currY, currZ),
+          new THREE.Vector3(3.2, 0.5, 3.2),
+          isGold ? this.materials.celestialGold : this.materials.celestialWhite
         );
-        this.obstacles.push(prism);
       }
+
+      this.collectibles.addCell(new THREE.Vector3(currX, currY + 1.2, currZ)); // Energy Cells 19, 20
+
+      // Gateway & Golden Jump Pad between tiers
+      this.assets.createCelestialGateway(new THREE.Vector3(currX, currY, currZ), 6.5, 6.0, tier * 1.2);
+      this.addLaunchPad(new THREE.Vector3(currX, currY + 0.5, currZ), 35);
     }
 
-    // Grand Launch Pad into the Zenith Sanctuary
-    currY += 6.0;
-    this.addPlatform(new THREE.Vector3(currX, currY, currZ), new THREE.Vector3(5.5, 1.0, 5.5), this.materials.celestialWhite);
-    this.addLaunchPad(new THREE.Vector3(currX, currY + 0.5, currZ), 48);
+    // GRAND ZENITH LAUNCH PAD at 975m: Rockets player through the clouds into the 1,000m Summit Sanctuary!
+    currY += 2.0;
+    this.addPlatform(new THREE.Vector3(0, currY, 0), new THREE.Vector3(7.0, 1.2, 7.0), this.materials.celestialWhite);
+    this.addLaunchPad(new THREE.Vector3(0, currY + 0.6, 0), 45);
 
     // ==========================================
     // THE SUMMIT SANCTUARY (1000m)
@@ -581,46 +646,57 @@ export class LevelBuilder {
     const summitY = 1000.0;
     this.summitPosition.set(0, summitY, 0);
 
-    const plazaGeo = new THREE.CylinderGeometry(15, 17, 2.0, 16);
+    // Circular Golden Summit Plaza (24m diameter)
+    const plazaGeo = new THREE.CylinderGeometry(12, 13, 2.0, 32);
     const plazaMesh = new THREE.Mesh(plazaGeo, this.materials.celestialWhite);
     plazaMesh.position.set(0, summitY - 1.0, 0);
     plazaMesh.receiveShadow = true;
     this.scene.add(plazaMesh);
 
-    const plazaVol = new CollisionVolume(VolumeType.BOX, new THREE.Vector3(15, 1.0, 15), new THREE.Vector3(0, summitY - 1.0, 0));
+    const plazaVol = new CollisionVolume(VolumeType.CYLINDER, new THREE.Vector3(12, 1.0, 12), new THREE.Vector3(0, summitY - 1.0, 0));
+    plazaVol.mesh = plazaMesh;
     this.physics.addVolume(plazaVol);
 
-    this.assets.createCelestialGateway(new THREE.Vector3(0, summitY, 12), 9.0, 8.5, 0);
+    // Celestial Golden Beacon Spire at (0, 1000, 0)
+    const spireGeo = new THREE.CylinderGeometry(0.6, 1.8, 28, 12);
+    const spireMat = new THREE.MeshStandardMaterial({
+      color: 0xffb703,
+      emissive: 0xffaa00,
+      emissiveIntensity: 0.6,
+      metalness: 0.95,
+      roughness: 0.1
+    });
+    const spire = new THREE.Mesh(spireGeo, spireMat);
+    spire.position.set(0, summitY + 14, 0);
+    this.scene.add(spire);
 
-    const towerGeo = new THREE.CylinderGeometry(1.2, 2.4, 24, 8);
-    const towerMesh = new THREE.Mesh(towerGeo, this.materials.celestialGold);
-    towerMesh.position.set(0, summitY + 12, 0);
-    towerMesh.castShadow = true;
-    this.scene.add(towerMesh);
-
-    const orbGeo = new THREE.DodecahedronGeometry(3.5, 2);
-    const orbMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const orbMesh = new THREE.Mesh(orbGeo, orbMat);
-    orbMesh.position.set(0, summitY + 26, 0);
-    this.scene.add(orbMesh);
-
-    const beaconLight = new THREE.PointLight(0xffb703, 5.0, 60);
-    beaconLight.position.set(0, summitY + 26, 0);
+    // Summit Beacon Light
+    const beaconLight = new THREE.PointLight(0xffd700, 5.0, 60);
+    beaconLight.position.set(0, summitY + 28, 0);
     this.scene.add(beaconLight);
 
+    // 8 Grand Celestial Archways ringing the Summit Plaza
+    for (let arch = 0; arch < 8; arch++) {
+      const archAngle = (arch / 8) * Math.PI * 2;
+      const ax = Math.cos(archAngle) * 9.5;
+      const az = Math.sin(archAngle) * 9.5;
+      this.assets.createCelestialGateway(new THREE.Vector3(ax, summitY, az), 5.5, 6.0, archAngle);
+    }
+
+    // Final Checkpoint at Summit
     this.addCheckpoint('checkpoint_summit', 'THE APEX ZENITH', new THREE.Vector3(0, summitY, 0));
   }
 
   // ==========================================
-  // HELPER BUILDERS
+  // HELPER GEOMETRY BUILDERS
   // ==========================================
   private addPlatform(
     pos: THREE.Vector3,
     size: THREE.Vector3,
-    mat?: THREE.Material
+    mat: THREE.Material
   ): THREE.Mesh {
     const geo = new THREE.BoxGeometry(size.x, size.y, size.z);
-    const mesh = new THREE.Mesh(geo, mat || this.materials.ceramicWhite);
+    const mesh = new THREE.Mesh(geo, mat);
     mesh.position.copy(pos);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -656,9 +732,7 @@ export class LevelBuilder {
 
   private addLaunchPad(pos: THREE.Vector3, impulse = 27): void {
     const pad = new LaunchPad(this.scene, this.physics, pos, new THREE.Vector3(2.6, 0.4, 2.6), impulse);
-    this.obstacles.push({
-      update: () => {}
-    });
+    this.obstacles.push(pad);
   }
 
   private addCrumblingPlatform(pos: THREE.Vector3, size: THREE.Vector3): void {
@@ -671,12 +745,15 @@ export class LevelBuilder {
     this.checkpoints.push(cp);
   }
 
-  public update(delta: number): void {
+  public update(delta: number, playerPos?: THREE.Vector3): void {
     for (const obs of this.obstacles) {
       obs.update(delta);
     }
     for (const cp of this.checkpoints) {
       cp.update(delta);
+    }
+    if (playerPos) {
+      this.collectibles.update(delta, playerPos);
     }
   }
 }

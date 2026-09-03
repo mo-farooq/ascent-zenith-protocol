@@ -12,10 +12,12 @@ export interface PlayerStats {
   isGrounded: boolean;
   isFalling: boolean;
   fallDistance: number;
+  dashCooldown: number;
+  maxDashCooldown: number;
 }
 
 export class Player {
-  public position = new THREE.Vector3(0, 1.0, 0); // feet position
+  public position = new THREE.Vector3(0, 0.2, 0); // feet position
   public velocity = new THREE.Vector3(0, 0, 0);
   public model: CharacterModel;
 
@@ -32,6 +34,12 @@ export class Player {
   private jumpVelocity = 11.2;
   private gravity = 28.0;
   private fallGravityMultiplier = 1.35;
+
+  // Thruster Dash
+  public dashCooldown = 0;
+  public readonly maxDashCooldown = 2.4;
+  private dashDurationTimer = 0;
+  private onDashCallback?: () => void;
 
   // State
   private isGrounded = false;
@@ -68,10 +76,12 @@ export class Player {
 
   public setCallbacks(
     onFall: (fallDistance: number) => void,
-    onRespawn: () => void
+    onRespawn: () => void,
+    onDash?: () => void
   ): void {
     this.onFallCallback = onFall;
     this.onRespawnCallback = onRespawn;
+    this.onDashCallback = onDash;
   }
 
   public setCheckpoint(pos: THREE.Vector3, yaw = 0): void {
@@ -89,6 +99,8 @@ export class Player {
     this.currentPlatform = null;
     this.coyoteTimer = 0;
     this.jumpBufferTimer = 0;
+    this.dashCooldown = 0;
+    this.dashDurationTimer = 0;
     this.model.group.position.copy(this.position);
     this.model.group.rotation.y = this.facingYaw;
     this.onRespawnCallback?.();
@@ -112,9 +124,16 @@ export class Player {
     // Timers
     if (this.jumpBufferTimer > 0) this.jumpBufferTimer -= dt;
     if (this.coyoteTimer > 0) this.coyoteTimer -= dt;
+    if (this.dashCooldown > 0) this.dashCooldown = Math.max(0, this.dashCooldown - dt);
+    if (this.dashDurationTimer > 0) this.dashDurationTimer -= dt;
 
     if (input.jumpPressed) {
       this.jumpBufferTimer = 0.12; // 120ms buffer
+    }
+
+    // Thruster Dash Trigger
+    if (input.dashPressed && this.dashCooldown <= 0.01 && !this.isFalling) {
+      this.executeDash(cameraYaw, input);
     }
 
     // 1. Moving Platform Delta Transport
@@ -325,6 +344,33 @@ export class Player {
     return from + diff * Math.min(1, Math.max(0, t));
   }
 
+  private executeDash(cameraYaw: number, input: InputState): void {
+    this.dashCooldown = this.maxDashCooldown;
+    this.dashDurationTimer = 0.22;
+
+    const camQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), cameraYaw);
+    let dashDir: THREE.Vector3;
+
+    if (Math.abs(input.forward) > 0.1 || Math.abs(input.right) > 0.1) {
+      dashDir = new THREE.Vector3(input.right, 0, -input.forward).normalize().applyQuaternion(camQuat).normalize();
+    } else {
+      dashDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camQuat).normalize();
+    }
+
+    const dashImpulse = 18.5;
+    this.velocity.x = dashDir.x * dashImpulse;
+    this.velocity.z = dashDir.z * dashImpulse;
+    this.velocity.y = Math.max(this.velocity.y, 4.8); // buoyant upward lift
+
+    this.facingYaw = Math.atan2(dashDir.x, dashDir.z);
+    this.isGrounded = false;
+    this.coyoteTimer = 0;
+
+    this.audio.playThrusterDash();
+    this.model.triggerLandSquash(-0.35);
+    this.onDashCallback?.();
+  }
+
   public getStats(): PlayerStats {
     return {
       altitude: Math.max(0, Math.round(this.position.y * 10) / 10),
@@ -332,7 +378,9 @@ export class Player {
       horizontalSpeed: Math.hypot(this.velocity.x, this.velocity.z),
       isGrounded: this.isGrounded,
       isFalling: this.isFalling,
-      fallDistance: Math.round(this.fallDistanceReported * 10) / 10
+      fallDistance: Math.round(this.fallDistanceReported * 10) / 10,
+      dashCooldown: Math.max(0, Math.round(this.dashCooldown * 10) / 10),
+      maxDashCooldown: this.maxDashCooldown
     };
   }
 }

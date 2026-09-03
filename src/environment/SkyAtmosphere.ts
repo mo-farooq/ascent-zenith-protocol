@@ -191,6 +191,13 @@ export class SkyAtmosphere {
       }
     });
 
+    // Directional shadow camera follows player smoothly up to 1000m
+    if (playerPos) {
+      this.dirLight.position.set(playerPos.x + 80, playerPos.y + 110, playerPos.z + 60);
+      this.dirLight.target.position.copy(playerPos);
+      this.dirLight.target.updateMatrixWorld();
+    }
+
     // Altitude color transition (0m to 1000m)
     const normAlt = Math.max(0, Math.min(1, playerAltitude / 1000));
 

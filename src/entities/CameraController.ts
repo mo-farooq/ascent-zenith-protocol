@@ -24,9 +24,17 @@ export class CameraController {
   private currentLookAt = new THREE.Vector3();
   private idealCameraPos = new THREE.Vector3();
 
+  // Screen shake / trauma
+  private trauma = 0;
+  private shakeTimer = 0;
+
   constructor(private physics: PhysicsWorld, aspect: number) {
     this.camera = new THREE.PerspectiveCamera(this.baseFov, aspect, 0.1, 2000);
     this.camera.position.set(0, 2, 5);
+  }
+
+  public addTrauma(amount: number): void {
+    this.trauma = Math.min(1.0, this.trauma + amount);
   }
 
   public handleMouseMove(deltaX: number, deltaY: number): void {
@@ -110,6 +118,18 @@ export class CameraController {
 
     // Position camera and orient
     this.camera.position.lerp(this.idealCameraPos, Math.min(1, dt * 28));
+
+    // Apply trauma screen shake
+    if (this.trauma > 0.001) {
+      this.trauma = Math.max(0, this.trauma - dt * 1.6);
+      this.shakeTimer += dt;
+      const shake = this.trauma * this.trauma;
+      const shakeX = (Math.sin(this.shakeTimer * 50) * 0.25 + (Math.random() - 0.5) * 0.1) * shake;
+      const shakeY = (Math.cos(this.shakeTimer * 42) * 0.25 + (Math.random() - 0.5) * 0.1) * shake;
+      this.camera.position.x += shakeX;
+      this.camera.position.y += shakeY;
+    }
+
     this.camera.lookAt(this.currentLookAt);
   }
 
