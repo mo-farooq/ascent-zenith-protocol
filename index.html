@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ASCENT: Zenith Protocol</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,600;0,700;1,700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #07090e;
+      --panel-bg: rgba(13, 17, 26, 0.72);
+      --panel-border: rgba(255, 255, 255, 0.12);
+      --panel-glow: rgba(0, 240, 255, 0.15);
+      --accent-cyan: #00f0ff;
+      --accent-gold: #ffb703;
+      --accent-crimson: #ff3366;
+      --accent-green: #00ff88;
+      --text-main: #f0f4f8;
+      --text-muted: #8899a6;
+      --font-display: 'Chakra Petch', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-body);
+    }
+
+    #game-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      outline: none;
+    }
+
+    /* UI Container */
+    #ui-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .interactive {
+      pointer-events: auto;
+    }
+
+    /* Crosshair */
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 6px;
+      height: 6px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.5);
+      box-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+
+    /* In-Game HUD */
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: opacity 0.4s ease;
+    }
+
+    .hud-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    /* Altimeter Panel */
+    .altimeter-box {
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 16px 22px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 0 12px var(--panel-glow);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 220px;
+    }
+
+    .altimeter-title {
+      font-family: var(--font-display);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--accent-cyan);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .altimeter-value-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .altimeter-val {
+      font-family: var(--font-mono);
+      font-size: 38px;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1;
+      text-shadow: 0 0 16px rgba(0, 240, 255, 0.4);
+    }
+
+    .altimeter-unit {
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .altimeter-bar-bg {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 4px;
+      position: relative;
+    }
+
+    .altimeter-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-gold));
+      border-radius: 3px;
+      transition: width 0.15s linear;
+      box-shadow: 0 0 8px var(--accent-cyan);
+    }
+
+    .altimeter-sub {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Stats Panel (Timer, Falls, Checkpoint) */
+    .stats-box {
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 14px 20px;
+      display: flex;
+      gap: 24px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .stat-label {
+      font-family: var(--font-display);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .stat-val {
+      font-family: var(--font-mono);
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    /* Center Notifications (Zone Entry, Checkpoint, Fall Impact) */
+    .hud-center {
+      position: absolute;
+      top: 25%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      pointer-events: none;
+    }
+
+    .zone-banner {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: #ffffff;
+      text-shadow: 0 0 24px var(--accent-cyan);
+      opacity: 0;
+      transform: translateY(16px) scale(0.95);
+      transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      background: linear-gradient(180deg, rgba(255,255,255,0.1), rgba(0,0,0,0.4));
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      padding: 10px 32px;
+      border-radius: 30px;
+      backdrop-filter: blur(12px);
+    }
+
+    .zone-banner.active {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    .checkpoint-toast {
+      background: rgba(0, 255, 136, 0.15);
+      border: 1px solid var(--accent-green);
+      color: var(--accent-green);
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 8px 24px;
+      border-radius: 20px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+      opacity: 0;
+      transform: scale(0.9);
+      transition: all 0.4s ease;
+    }
+
+    .checkpoint-toast.active {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    /* Fall Vignette and Warning */
+    #fall-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      background: radial-gradient(circle at center, transparent 40%, rgba(255, 51, 102, 0.4) 100%);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 15;
+    }
+
+    #fall-overlay.active {
+      opacity: 1;
+    }
+
+    .fall-text {
+      font-family: var(--font-display);
+      font-size: 48px;
+      font-weight: 800;
+      letter-spacing: 4px;
+      color: var(--accent-crimson);
+      text-shadow: 0 0 30px rgba(255, 51, 102, 0.8);
+      animation: pulse 1s infinite alternate;
+    }
+
+    .fall-sub {
+      font-family: var(--font-mono);
+      font-size: 18px;
+      color: #fff;
+      margin-top: 8px;
+    }
+
+    /* Bottom Hints Bar */
+    .hud-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+
+    .hints-box {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      background: rgba(0, 0, 0, 0.4);
+      padding: 8px 16px;
+      border-radius: 8px;
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      gap: 16px;
+    }
+
+    .hints-box kbd {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    /* Menus & Dialogs */
+    .modal-backdrop {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(4, 6, 12, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.35s ease;
+      z-index: 20;
+    }
+
+    .modal-backdrop.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .menu-panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 20px;
+      padding: 44px;
+      width: 92%;
+      max-width: 520px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), 0 0 40px var(--panel-glow);
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      transform: translateY(20px) scale(0.96);
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .modal-backdrop.active .menu-panel {
+      transform: translateY(0) scale(1);
+    }
+
+    .game-logo {
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .game-title {
+      font-family: var(--font-display);
+      font-size: 52px;
+      font-weight: 800;
+      letter-spacing: 6px;
+      color: #ffffff;
+      line-height: 1;
+      text-shadow: 0 0 30px rgba(0, 240, 255, 0.5);
+      background: linear-gradient(180deg, #ffffff 40%, var(--accent-cyan) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .game-subtitle {
+      font-family: var(--font-display);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 5px;
+      color: var(--accent-gold);
+      text-transform: uppercase;
+      margin-top: 6px;
+    }
+
+    .game-tagline {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .btn-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .btn {
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 16px 24px;
+      border-radius: 10px;
+      border: 1px solid var(--panel-border);
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-main);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    .btn:hover {
+      background: rgba(0, 240, 255, 0.15);
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
+      color: #ffffff;
+      transform: translateY(-2px);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.2), rgba(0, 150, 255, 0.4));
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 25px rgba(0, 240, 255, 0.35);
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.35), rgba(0, 150, 255, 0.6));
+      box-shadow: 0 0 35px rgba(0, 240, 255, 0.5);
+    }
+
+    .btn-danger {
+      border-color: rgba(255, 51, 102, 0.4);
+      background: rgba(255, 51, 102, 0.1);
+      color: #ff88a3;
+    }
+
+    .btn-danger:hover {
+      background: rgba(255, 51, 102, 0.25);
+      border-color: var(--accent-crimson);
+      box-shadow: 0 0 20px rgba(255, 51, 102, 0.4);
+      color: #ffffff;
+    }
+
+    /* Settings Form Controls */
+    .settings-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-height: 380px;
+      overflow-y: auto;
+      padding-right: 8px;
+    }
+
+    .settings-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .setting-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-main);
+    }
+
+    .setting-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .slider-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 140px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 3px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      box-shadow: 0 0 10px var(--accent-cyan);
+      cursor: pointer;
+    }
+
+    .slider-val {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      min-width: 38px;
+      text-align: right;
+      color: var(--accent-cyan);
+    }
+
+    /* Victory Modal Special */
+    .victory-box {
+      text-align: center;
+    }
+
+    .victory-badge {
+      font-family: var(--font-display);
+      font-size: 72px;
+      font-weight: 800;
+      color: var(--accent-gold);
+      text-shadow: 0 0 35px rgba(255, 183, 3, 0.8);
+      margin: 12px 0;
+      animation: victoryPulse 2s infinite ease-in-out;
+    }
+
+    .victory-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin: 18px 0;
+      text-align: left;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    @keyframes victoryPulse {
+      0%, 100% { transform: scale(1); filter: drop-shadow(0 0 15px rgba(255, 183, 3, 0.5)); }
+      50% { transform: scale(1.05); filter: drop-shadow(0 0 35px rgba(255, 183, 3, 0.9)); }
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.98); }
+      100% { transform: scale(1.02); }
+    }
+  </style>
+</head>
+<body>
+  <!-- 3D Canvas -->
+  <canvas id="game-canvas" tabindex="0"></canvas>
+
+  <!-- UI Overlay Container -->
+  <div id="ui-container">
+    <div id="crosshair"></div>
+
+    <!-- HUD -->
+    <div id="hud">
+      <div class="hud-top">
+        <div class="altimeter-box">
+          <div class="altimeter-title">
+            <span>Altitude</span>
+            <span id="zone-tag">THE YARD</span>
+          </div>
+          <div class="altimeter-value-row">
+            <span class="altimeter-val" id="hud-altitude">0.0</span>
+            <span class="altimeter-unit">m</span>
+          </div>
+          <div class="altimeter-bar-bg">
+            <div class="altimeter-bar-fill" id="hud-altitude-bar"></div>
+          </div>
+          <div class="altimeter-sub">
+            <span>Peak: <span id="hud-peak">0.0m</span></span>
+            <span>Target: 1000m</span>
+          </div>
+        </div>
+
+        <div class="stats-box">
+          <div class="stat-item">
+            <span class="stat-label">Climb Time</span>
+            <span class="stat-val" id="hud-timer">00:00.0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Falls</span>
+            <span class="stat-val" id="hud-falls" style="color: var(--accent-crimson);">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Checkpoint</span>
+            <span class="stat-val" id="hud-checkpoint" style="color: var(--accent-green);">BASE</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="hud-center">
+        <div class="zone-banner" id="hud-zone-banner">ZONE 1: THE YARD</div>
+        <div class="checkpoint-toast" id="hud-checkpoint-toast">CHECKPOINT ACTIVATED</div>
+      </div>
+
+      <div class="hud-bottom">
+        <div class="hints-box">
+          <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</span>
+          <span><kbd>SPACE</kbd> Jump</span>
+          <span><kbd>SHIFT</kbd> Sprint</span>
+          <span><kbd>MOUSE</kbd> Look</span>
+          <span><kbd>R</kbd> Respawn</span>
+          <span><kbd>ESC</kbd> Pause</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fall Feedback Overlay -->
+    <div id="fall-overlay">
+      <div class="fall-text">FALL DETECTED</div>
+      <div class="fall-sub" id="fall-height-report">Fell 45.2 meters</div>
+    </div>
+
+    <!-- Main Menu Modal -->
+    <div class="modal-backdrop interactive active" id="menu-main">
+      <div class="menu-panel">
+        <div class="game-logo">
+          <div class="game-title">ASCENT</div>
+          <div class="game-subtitle">Zenith Protocol</div>
+        </div>
+        <p class="game-tagline">
+          1,000 meters into the atmosphere across floating industrial ruins, cogwork spires, and celestial monoliths. Every leap counts. Gravity never forgets.
+        </p>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="btn-start-game">
+            <span>▶</span> Start Climb
+          </button>
+          <button class="btn" id="btn-open-settings">
+            <span>⚙</span> Settings
+          </button>
+          <button class="btn" id="btn-how-to-play">
+            <span>?</span> How to Play
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pause Menu Modal -->
+    <div class="modal-backdrop interactive" id="menu-pause">
+      <div class="menu-panel">
+        <div class="game-logo">
+          <div class="game-title" style="font-size: 36px;">PAUSED</div>
+          <div class="game-subtitle">Climb Suspended</div>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="btn-resume">Resume Climb</button>
+          <button class="btn btn-danger" id="btn-restart-checkpoint">Respawn at Checkpoint</button>
+          <button class="btn" id="btn-pause-settings">Settings</button>
+          <button class="btn" id="btn-quit-main">Main Menu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-backdrop interactive" id="modal-settings">
+      <div class="menu-panel">
+        <div class="game-logo">
+          <div class="game-title" style="font-size: 32px;">SETTINGS</div>
+        </div>
+        <div class="settings-grid">
+          <div class="settings-row">
+            <div>
+              <div class="setting-label">Mouse Sensitivity</div>
+              <div class="setting-desc">Adjust camera orbit speed</div>
+            </div>
+            <div class="slider-wrap">
+              <input type="range" id="setting-sensitivity" min="0.5" max="3.0" step="0.1" value="1.2">
+              <span class="slider-val" id="val-sensitivity">1.2</span>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div>
+              <div class="setting-label">Field of View (FOV)</div>
+              <div class="setting-desc">Camera lens angle</div>
+            </div>
+            <div class="slider-wrap">
+              <input type="range" id="setting-fov" min="60" max="100" step="1" value="75">
+              <span class="slider-val" id="val-fov">75°</span>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div>
+              <div class="setting-label">Master Volume</div>
+              <div class="setting-desc">Overall sound output</div>
+            </div>
+            <div class="slider-wrap">
+              <input type="range" id="setting-volume-master" min="0" max="1" step="0.05" value="0.8">
+              <span class="slider-val" id="val-volume-master">80%</span>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div>
+              <div class="setting-label">Ambient Music</div>
+              <div class="setting-desc">Atmospheric altitude pads</div>
+            </div>
+            <div class="slider-wrap">
+              <input type="range" id="setting-volume-music" min="0" max="1" step="0.05" value="0.7">
+              <span class="slider-val" id="val-volume-music">70%</span>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div>
+              <div class="setting-label">Sound Effects</div>
+              <div class="setting-desc">Footsteps, jumps, wind, impacts</div>
+            </div>
+            <div class="slider-wrap">
+              <input type="range" id="setting-volume-sfx" min="0" max="1" step="0.05" value="0.9">
+              <span class="slider-val" id="val-volume-sfx">90%</span>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div>
+              <div class="setting-label">Invert Pitch (Y-Axis)</div>
+              <div class="setting-desc">Invert vertical mouse direction</div>
+            </div>
+            <input type="checkbox" id="setting-invert-y" style="width: 18px; height: 18px; cursor: pointer;">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btn-close-settings">Save & Close</button>
+      </div>
+    </div>
+
+    <!-- How to Play Modal -->
+    <div class="modal-backdrop interactive" id="modal-howto">
+      <div class="menu-panel">
+        <div class="game-logo">
+          <div class="game-title" style="font-size: 32px;">HOW TO CLIMB</div>
+        </div>
+        <div style="font-size: 13.5px; line-height: 1.6; color: var(--text-main); display: flex; flex-direction: column; gap: 12px;">
+          <p>🧗 <strong>The Objective:</strong> Reach the glowing Zenith Beacon at the 1,000-meter summit.</p>
+          <p>⚖ <strong>Physics & Weight:</strong> You control a climber with realistic momentum. Hold <kbd>SPACE</kbd> for higher jumps. Running sprints into jumps gives extra forward distance.</p>
+          <p>⚠️ <strong>Steep Slopes:</strong> Surfaces angled over 45° are slippery. You will slide down them unless you jump immediately.</p>
+          <p>🎯 <strong>Moving Obstacles:</strong> Rotating crane arms, clockwork gears, and pneumatic bounce pads will test your timing. Jumping from a moving surface transfers momentum.</p>
+          <p>🚩 <strong>Checkpoints:</strong> Rare milestones save your progress. Stepping on a glowing green pad saves your position. If you fall past a section floor, you respawn here.</p>
+        </div>
+        <button class="btn btn-primary" id="btn-close-howto">Got It</button>
+      </div>
+    </div>
+
+    <!-- Summit Victory Modal -->
+    <div class="modal-backdrop interactive" id="modal-victory">
+      <div class="menu-panel victory-box">
+        <div class="game-subtitle" style="font-size: 15px; color: var(--accent-gold);">1,000 METERS CONQUERED</div>
+        <div class="game-title" style="font-size: 42px;">ZENITH REACHED</div>
+        <div class="victory-badge" id="victory-rank">S</div>
+        <p class="game-tagline">You stood atop the world and mastered the vertical climb.</p>
+        <div class="victory-stats">
+          <div class="stat-item">
+            <span class="stat-label">Final Time</span>
+            <span class="stat-val" id="victory-time">08:42.1</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Total Falls</span>
+            <span class="stat-val" id="victory-falls" style="color: var(--accent-crimson);">3</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Peak Reached</span>
+            <span class="stat-val" id="victory-height">1002.4m</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Performance</span>
+            <span class="stat-val" id="victory-grade-text" style="color: var(--accent-gold);">Master Climber</span>
+          </div>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="btn-victory-restart">Ascend Again</button>
+          <button class="btn" id="btn-victory-freeroam">Free Exploration</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
